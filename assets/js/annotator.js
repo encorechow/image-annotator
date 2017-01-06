@@ -30,6 +30,10 @@
       self.size = 0;
       self.hadUndo = false;
     },
+    getSize: function(){
+      var self = this;
+      return self.size;
+    },
     add: function(item){
       var self = this;
       var flag = self.checkLimit();
@@ -360,93 +364,16 @@
 
       self.canvas.on({
         mousemove: function(e){
-          e.preventDefault();
-          if (!self.curTool){
-            return;
-          }
-          var x_off = e.pageX - $(this).offset().left;
-          var y_off = e.pageY - $(this).offset().top;
-          // console.log("page:", e.pageX, e.pageY);
-          // console.log("client:", e.clientX, e.clientY);
-          switch(self.curTool){
-            case 'pen':
-              if (self.mousePressed){
-                self.drawLine(x_off, y_off);
-              }
-              break;
-            case 'polygon':
-              break;
-            case 'rectangle':
-
-              break;
-          }
-
+          self.handleMousemove(e, this)
         },
         mousedown: function(e){
-          e.preventDefault();
-          if (!self.curTool){
-            return;
-          }
-          var x_off = e.pageX - $(this).offset().left;
-          var y_off = e.pageY - $(this).offset().top;
-          switch(self.curTool){
-            case 'pen':
-              self.drawLineBegin(x_off, y_off);
-              break;
-            case 'polygon':
-              // if start a polygon draw
-              if (self.selectedItem){
-                if (self.polyStarted){
-                  var curPoly = self.polygonPoints[self.polyNum-1]['points'];
-                  if(Math.abs(x_off - curPoly[0].x) < END_CLICK_RADIUS && Math.abs(y_off - curPoly[0].y) < END_CLICK_RADIUS) {
-                    self.polyStarted = false;
-                  } else {
-                    curPoly[curPoly.length] = new Point(x_off, y_off);
-                    if(curPoly.length >= MAX_POINTS) {
-                      self.polyStarted = false;
-                    }
-                  }
-
-                }else{
-
-                  // start a polygon draw
-                  self.drawPolyBegin(x_off, y_off)
-                }
-                self.drawPolygon();
-              }else{
-                alert('Please select a class name!');
-                return;
-              }
-              break;
-            case 'rectangle':
-
-              self.drawRectBegin(x_off, y_off);
-              break;
-          }
-
+          self.handleMousedown(e, this);
         },
         mouseup: function(e){
-          e.preventDefault();
-          if (!self.curTool || !self.selectedItem){
-            return;
-          }
-          var x_off = e.pageX - $(this).offset().left;
-          var y_off = e.pageY - $(this).offset().top;
-          if (self.curTool == 'rectangle'){
-            self.drawRect(self.ctx, x_off, y_off);
-          }
-          self.mousePressed = false;
-          var curImg = this.toDataURL();
-          self.addHistory(curImg, historyFrame);
-
+          self.handleMouseup(e, this, historyFrame);
         },
         mouseleave: function(e){
-          e.preventDefault();
-          if (!self.curTool){
-            return;
-          }
-          self.mousePressed = false;
-
+          self.handleMouseleave(e, this, historyFrame);
         }
       });
 
@@ -496,7 +423,6 @@
         'height': '200px',
         'margin': '0 auto',
       });
-      console.log(main[0]);
       self.$toolKitWrapper.insertBefore(canvWrapper);
       self.$classPanelWrapper.insertBefore(canvWrapper);
       self.$hisPanelWrapper.insertAfter(canvWrapper);
@@ -518,6 +444,116 @@
       });
 
 
+    },
+    handleMousemove: function(e, canvas){
+      e.preventDefault();
+      var self = this;
+      if (!self.curTool){
+        return;
+      }
+      // event coordinate
+      var x_off = e.pageX - $(canvas).offset().left;
+      var y_off = e.pageY - $(canvas).offset().top;
+
+      switch(self.curTool){
+        case 'pen':
+          if (self.mousePressed){
+            self.drawLine(x_off, y_off);
+          }
+          break;
+        case 'polygon':
+          break;
+        case 'rectangle':
+          break;
+      }
+
+    },
+    handleMouseup: function(e, canvas, historyFrame){
+      e.preventDefault();
+      var self = this;
+      // check if the tool and class is selected
+      if (!self.curTool || !self.selectedItem){
+        return;
+      }
+      // event coordinate
+      var x_off = e.pageX - $(canvas).offset().left;
+      var y_off = e.pageY - $(canvas).offset().top;
+
+      if (self.curTool == 'rectangle'){
+        self.drawRect(self.ctx, x_off, y_off);
+      }
+      self.mousePressed = false;
+      var curImg = canvas.toDataURL();
+      // Add history item
+      self.addHistory(curImg, historyFrame);
+
+    },
+
+    handleMousedown: function(e, canvas){
+      var self = this;
+      e.preventDefault();
+      if (!self.curTool){
+        return;
+      }
+      // event coordinate
+      var x_off = e.pageX - $(canvas).offset().left;
+      var y_off = e.pageY - $(canvas).offset().top;
+
+      switch(self.curTool){
+        case 'pen':
+          self.drawLineBegin(x_off, y_off);
+          break;
+        case 'polygon':
+          // if start a polygon draw
+          if (self.selectedItem){
+            if (self.polyStarted){
+              var curPoly = self.polygonPoints[self.polyNum-1]['points'];
+
+              // end polygon draw by clicking near the start point or reaching the max num of points
+              if(Math.abs(x_off - curPoly[0].x) < END_CLICK_RADIUS && Math.abs(y_off - curPoly[0].y) < END_CLICK_RADIUS) {
+                self.polyStarted = false;
+              } else {
+                curPoly[curPoly.length] = new Point(x_off, y_off);
+                if(curPoly.length >= MAX_POINTS) {
+                  self.polyStarted = false;
+                }
+              }
+
+            }else{
+              // start a polygon draw
+              self.drawPolyBegin(x_off, y_off)
+            }
+            self.drawPolygon();
+          }else{
+            alert('Please select a class name!');
+            return;
+          }
+          break;
+        case 'rectangle':
+          self.drawRectBegin(x_off, y_off);
+          break;
+      }
+
+    },
+    handleMouseleave: function(e, canvas, historyFrame){
+      e.preventDefault();
+      var self = this;
+      if (!self.curTool){
+        return;
+      }
+      // event coordinate
+      var x_off = e.pageX - $(canvas).offset().left;
+      var y_off = e.pageY - $(canvas).offset().top;
+
+      if (self.mousePressed){
+        if (self.curTool == 'rectangle'){
+          self.drawRect(self.ctx, x_off, y_off);
+        }
+        var curImg = canvas.toDataURL();
+        // Add history item
+        self.addHistory(curImg, historyFrame);
+      }
+      self.mousePressed = false;
     },
 
     contrastColor: function(hexcolor){
@@ -550,7 +586,6 @@
             errorContainer.text('Reached maximum number, please remove useless name');
             errorContainer.show();
           }
-
         }else{
           errorContainer.show();
         }
@@ -708,15 +743,18 @@
 
     undoOnce: function(history){
       var self = this;
+      var stack = self.historyStack;
+      if (stack.curIdx == 1){
+        return;
+      }
       var tr = history.find('tbody').find('tr').first();
       var id = tr.attr('id');
-      self.historyStack.delete(parseInt(id));
-
+      stack.delete(parseInt(id));
 
       tr.remove();
 
-      /* restore to canvas*/
-      var prev = self.historyStack.peek();
+      /* restore to canvas */
+      var prev = stack.peek();
 
       var url = prev['image'];
 
@@ -726,8 +764,9 @@
     redoOnce: function(history){
       var self = this;
       var stack = self.historyStack;
-      console.log(stack.size);
+
       if (stack.find(stack.size)){
+              console.log(stack.size);
         var item = stack.find(stack.size);
         stack.add(item);
         var url = item['image'];
@@ -763,7 +802,7 @@
       var item = self.historyStack.peek();
       var url = item['image'];
       self.renderURL(url);
-    }
+    },
 
   }
 
