@@ -6,6 +6,13 @@
     this.y = y;
   }
 
+  function Record(action, className, colorVal, data){
+    this.action = action;
+    this.className = className;
+    this.colorVal = colorVal;
+    this.data = data;
+  }
+
   /**
      * Function to construct annotator
      * @param {int} type       [Type for using this stack]
@@ -142,7 +149,9 @@
       this.$toolKit = null;
       this.$hisPanel = null;
       this.$classPanel = null;
+      // {'name': , 'color': }
       this.selectedItem = null;
+      this.metaData = null;
       this.curTool = null;
       this.mousePressed = null;
       this.point = null;
@@ -165,6 +174,7 @@
       self.polyStarted = false;
       self.point = new Point(0, 0);
       self.polygonPoints = new Array();
+
       self.polyNum = 0;
       self.lineWidth = 0;
       self.stackType ={'class': 0, 'history': 1};
@@ -173,12 +183,12 @@
       self.classStack = new infoStack(self.stackType['class'], 50);
       self.historyStack = new infoStack(self.stackType['history'], 20);
 
-      self.historyStack.add({'image': self.canvasData, 'tool': null});
+      self.historyStack.add({'image': self.canvasData, 'tool': null, 'record': null});
 
       //radius of click around the first point to close the draw of polygon
-      var END_CLICK_RADIUS = 10;
+      self.POLY_END_CLICK_RADIUS = 10;
       //the max number of points of your polygon
-      var MAX_POINTS = 8;
+      self.POLY_MAX_POINTS = 8;
 
 
       self.$classPanelWrapper = $('<div class="panelwrapper"></div>');
@@ -250,7 +260,7 @@
 
 
       /* sub-elements for tool kit*/
-      var lineWidth = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+      var lineWidth = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
       var titleTool = $('<p class="module-title">Toolkit</p>')
       var pencil = $('<span class="toolkit-item"><i class="fa fa-pencil" aria-hidden="true"></i>&nbsp pen</span>');
       var polygon = $('<span class="toolkit-item"><i class="fa fa-map-o" aria-hidden="true"></i>&nbsp polygon</span>')
@@ -265,7 +275,7 @@
         strokeOptions.append(option);
       }
 
-      self.lineWidth = strokeOptions.val();
+      self.lineWidth = parseInt(strokeOptions.val());
 
       self.$toolKitWrapper.append(titleTool);
       self.$toolKitWrapper.append(pencil);
@@ -335,7 +345,6 @@
         var candidates = $('#selectFrame > tbody > tr');
         candidates.each(function(index){
           self.deleteClass(self.classStack, $(this));
-          console.log(self.classStack.curIdx);
         });
       });
 
@@ -358,8 +367,16 @@
         $('.toolkit-item').removeClass('highlight');
         if(!selected)
             $(this).addClass('highlight');
+            if (self.curTool === 'polygon'){
+              self.polyStarted = false;
+              self.drawPolygon();
+              self.mousePressed = false;
+              var curImg = self.canvas[0].toDataURL();
+              // Add history item
+              self.addHistory(curImg, historyFrame);
+            }
         self.curTool = $(this).text().trim();
-        console.log(self.curTool);
+        self.metaData = new Array();
       });
 
       self.canvas.on({
@@ -378,7 +395,7 @@
       });
 
       strokeOptions.on('change', function(e){
-        self.lineWidth = $(this).val();
+        self.lineWidth = parseInt($(this).val());
       });
 
 
@@ -395,7 +412,7 @@
           $(this).remove();
         });
         self.historyStack = new infoStack(self.stackType['history'], 20);
-        self.historyStack.add({'image': self.canvasData, 'tool': null});
+        self.historyStack.add({'image': self.canvasData, 'tool': null, 'record': null});
         self.renderURL(self.canvasData);
       });
 
@@ -448,7 +465,7 @@
     handleMousemove: function(e, canvas){
       e.preventDefault();
       var self = this;
-      if (!self.curTool){
+      if (!self.curTool || !self.selectedItem){
         return;
       }
       // event coordinate
@@ -486,13 +503,15 @@
       var curImg = canvas.toDataURL();
       // Add history item
       self.addHistory(curImg, historyFrame);
+      console.log(self.metaData);
+      self.metaData = new Array();
 
     },
 
     handleMousedown: function(e, canvas){
       var self = this;
       e.preventDefault();
-      if (!self.curTool){
+      if (!self.curTool || !self.selectedItem){
         return;
       }
       // event coordinate
@@ -510,11 +529,11 @@
               var curPoly = self.polygonPoints[self.polyNum-1]['points'];
 
               // end polygon draw by clicking near the start point or reaching the max num of points
-              if(Math.abs(x_off - curPoly[0].x) < END_CLICK_RADIUS && Math.abs(y_off - curPoly[0].y) < END_CLICK_RADIUS) {
+              if(Math.abs(x_off - curPoly[0].x) < self.POLY_END_CLICK_RADIUS && Math.abs(y_off - curPoly[0].y) < self.POLY_END_CLICK_RADIUS) {
                 self.polyStarted = false;
               } else {
                 curPoly[curPoly.length] = new Point(x_off, y_off);
-                if(curPoly.length >= MAX_POINTS) {
+                if(curPoly.length >= self.POLY_MAX_POINTS) {
                   self.polyStarted = false;
                 }
               }
@@ -538,7 +557,7 @@
     handleMouseleave: function(e, canvas, historyFrame){
       e.preventDefault();
       var self = this;
-      if (!self.curTool){
+      if (!self.curTool || !self.selectedItem){
         return;
       }
       // event coordinate
@@ -623,34 +642,94 @@
 
     drawLineBegin: function(x, y){
       var self = this;
+      self.metaData = new Array();
       self.mousePressed = true;
-      self.point.x = x;
-      self.point.y = y;
-
+      self.point.x = Math.round(x);
+      self.point.y = Math.round(y);
+      self.metaData.push(new Point(Math.round(x), Math.round(y)));
     },
     drawLine: function(x, y){
       var self = this;
       var item = self.selectedItem;
+      if (Math.round(self.point.x) == Math.round(x) && Math.round(self.point.y) == Math.round(y)){
+        return;
+      }
+
       if(self.selectedItem){
         self.ctx.beginPath();
         self.ctx.strokeStyle = '#' + self.selectedItem['color'].toString();
-        self.ctx.lineWidth = self.lineWidth;
-        self.ctx.lineJoin = 'round';
-        self.ctx.moveTo(self.point.x, self.point.y);
-        self.ctx.lineTo(x, y);
-        self.ctx.closePath();
-        self.ctx.stroke();
+        var rgb = self.hexToRgb(self.ctx.strokeStyle);
+        var round_x = Math.round(x);
+        var round_y = Math.round(y);
+        var r = rgb.r;
+        var g = rgb.g;
+        var b = rgb.b;
+        var correction = Math.floor(self.lineWidth / 2);
+        self.ctx.fillStyle = "rgba("+r+","+g+","+b+","+(255/255)+")";
+        self.ctx.fillRect(round_x-correction, round_y-correction, self.lineWidth, self.lineWidth );
+        // self.ctx.lineJoin = 'round';
+        // self.ctx.moveTo(self.point.x, self.point.y);
+        // self.ctx.lineTo(x, y);
+        // self.ctx.closePath();
+        // self.ctx.stroke();
+        //
+        // // line equation: y-y1 = (y2-y1)/(x2-x1) * (x-x1) derived: (y1-y2) * x + (x2-x1) * y + (x1-x2)*y1 + (y2-y1)*x1 = 0
+        var a = self.point.y - y;
+        var b = x - self.point.x;
+        var c = (self.point.x - x) * self.point.y + (y - self.point.y) * self.point.x;
+
+        var length = self.metaData.length;
+
+        // fit the line on X-axis
+        for (var fix_x = Math.round(Math.min(self.point.x, x)) + 1; fix_x < Math.round(Math.max(self.point.x, x)); fix_x++){
+          var cal_y = Math.round((- (c + a * fix_x) / b));
+          var pointOnLine = new Point(fix_x, cal_y);
+
+          if (pointOnLine.x != self.metaData[length-1].x || pointOnLine.y != self.metaData[length-1].y){
+            console.log(pointOnLine.x-correction, pointOnLine.y-correction + self.lineWidth);
+            for (var start_x = pointOnLine.x-correction; start_x < pointOnLine.x-correction + self.lineWidth; start_x++){
+              for (var start_y = pointOnLine.y-correction; start_y < pointOnLine.y-correction + self.lineWidth; start_y++){
+                self.metaData.push(new Point(start_x, start_y));
+
+              }
+            }
+            self.ctx.fillRect( pointOnLine.x-correction, pointOnLine.y-correction, self.lineWidth, self.lineWidth );
+          }
+        }
+
+        // fit the line on Y-axis
+        for (var fix_y = Math.round(Math.min(self.point.y, y)) + 1; fix_y < Math.round(Math.max(self.point.y, y)); fix_y++){
+          var cal_x = Math.round((- (c + b * fix_y) / a));
+          var pointOnLine = new Point(cal_x, fix_y);
+          if (pointOnLine.x != self.metaData[length-1].x || pointOnLine.y != self.metaData[length-1].y){
+
+            for (var start_x = pointOnLine.x-correction; start_x < pointOnLine.x-correction + self.lineWidth; start_x++){
+              for (var start_y = pointOnLine.y-correction; start_y < pointOnLine.y-correction + self.lineWidth; start_y++){
+                self.metaData.push(new Point(start_x, start_y));
+              }
+            }
+            self.ctx.fillRect( pointOnLine.x-correction, pointOnLine.y-correction, self.lineWidth, self.lineWidth );
+          }
+        }
+
         self.point.x = x;
         self.point.y = y;
-      }else{
-        alert("Please Choose a Class!");
-        return;
+        if (Math.round(x) != self.metaData[length-1].x && Math.round(y) != self.metaData[length-1].y){
+          for (var start_x = round_x-correction; start_x < round_x-correction + self.lineWidth; start_x++){
+            for (var start_y = round_y-correction; start_y < round_y-correction + self.lineWidth; start_y++){
+              self.metaData.push(new Point(start_x, start_y));
+            }
+          }
+          self.metaData.push(new Point(round_x, round_y));
+        }
       }
     },
 
+    // TODO: pixels inside polygon and put them into metaData
     drawPolyBegin: function(x, y){
       var self = this;
       var points = new Array();
+      self.metaData = new Array();
       points[0] = new Point(x, y)
       var item = {'points': points, 'color': self.selectedItem['color']};
       self.polygonPoints[self.polyNum++] = item;
@@ -723,7 +802,8 @@
     addHistory: function(img, container){
       var self = this;
       var stack = self.historyStack;
-      var item = {'image': img, 'tool': self.curTool};
+      var record = new Record(self.curTool, self.selectedItem['name'], self.selectedItem['color'], self.metaData);
+      var item = {'image': img, 'tool': self.curTool, 'record': record};
 
 
       var state = stack.add(item);
@@ -782,6 +862,7 @@
     },
 
     updateId: function(history){
+      history.find('#1').remove();
       history.find('tr').each(function(index){
         var newId = parseInt($(this).attr('id')) - 1;
         $(this).attr('id', newId.toString());
@@ -803,6 +884,14 @@
       var url = item['image'];
       self.renderURL(url);
     },
+    hexToRgb: function(hex) {
+      var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : null;
+    }
 
   }
 
