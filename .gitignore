@@ -4,5 +4,7 @@ index.html
 test.html
 assets/.sass-cache
 assets/cmp
-assets/sass/
+assets/sass/.sass-cache/
 assets/cmp
+checkOverlap.ipynb
+.ipynb_checkpoints
