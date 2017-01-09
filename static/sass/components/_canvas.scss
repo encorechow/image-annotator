@@ -1,0 +1,147 @@
+/* Canvas */
+
+#canvas-wrapper{
+  position: relative;
+  background-color: #000000;
+  width: 50%;
+  height: 500px;
+  opacity: 0.8;
+  // margin 0 auto only works for block
+  margin: 0 auto;
+  border-radius: 20px;
+
+
+  #showMsg{
+    overflow: hidden;
+    text-align: left;
+    width: 50%;
+    height: 20%;
+    position: relative;
+    margin: 0 auto;
+    top: 40%;
+
+
+    input {
+      position: absolute;
+      left:-50px;
+      opacity: 0;
+      top: 25px;
+    }
+  }
+
+  .theMsg{
+    color:white;
+    text-align: center;
+    line-height:80px;
+  }
+
+  #dragMsg{
+    height: 100%;
+    width: 100%;
+    position: absolute;
+  }
+
+  #chooseMsg{
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    top: -100px;
+  }
+}
+
+
+.panelwrapper{
+  position: relative;
+  display : inline-block;
+  vertical-align: top;
+}
+
+.decisionBtn{
+  position: relative;
+  display: inline-block;
+  margin: 1px;
+  top: 10px;
+  font-size: 10px;
+}
+
+
+
+.table-hover > tbody > tr:hover {
+  background-color: #D2D2D2;
+}
+
+.fixed-table-container {
+    border:0px !important;
+}
+
+.error{
+  margin: 0;
+  font-size: 12px;
+  color: red;
+}
+
+.highlight {
+   background-color: #90b9f9;
+ }
+
+
+.toolkit-item{
+  margin-left: 30px;
+  font-size: 18px;
+}
+.toolkit-item:hover{
+  background-color: #D2D2D2;
+  cursor: pointer;
+}
+
+#selWidth{
+  width: 20%;
+  margin: 20px;
+  display: inline-block;
+  font-size: 18px;
+
+}
+
+.panel-frame{
+  display:inline-block;
+  overflow: auto;
+  font-size: 16px;
+  text-align: left;
+  border:1px solid black !important;
+  margin-top: 20px;
+  margin-bottom: 0px;
+  border-collapse: separate;
+
+  th, td{
+    width:100%;
+    border: 1px !important;
+  }
+  th{
+    color: white !important;
+  }
+
+  thead{
+    background-color: black;
+  }
+}
+
+#selectFrame{
+  height: 300px;
+}
+#historyFrame{
+  height: 400px;
+}
+
+.op-his{
+  position: relative;
+  display: inline-block;
+  margin: 1px;
+  top: 10px;
+  font-size: 10px;
+}
+
+.module-title{
+  font-family: "Monaco" !important;
+  font-size: 18px;
+  margin: 5px;
+}
