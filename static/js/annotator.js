@@ -607,14 +607,24 @@
       var x_off = e.pageX - $(canvas).offset().left;
       var y_off = e.pageY - $(canvas).offset().top;
 
-      if (self.mousePressed){
-        if (self.curTool == 'rectangle'){
+      var curImg = canvas.toDataURL();
+
+      switch (self.curTool) {
+        case 'pen':
+          var color = self.hexToRgb(self.selectedItem['color'])
+          var top = self.historyStack.peek();
+          var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color});
+          var label = self.sendMask(json, curImg, historyFrame);
+          break;
+        case 'rectangle':
           self.drawRect(self.ctx, x_off, y_off);
-        }
-        var curImg = canvas.toDataURL();
-        // Add history item
-        self.addHistory(curImg, historyFrame);
-      }
+          break;
+        case 'polygon':
+          break;
+        default:
+          alert('Error!');
+          return;
+
       self.mousePressed = false;
     },
 
@@ -951,6 +961,8 @@
     },
     sendMask: function(json, curImg, historyFrame){
       var self = this;
+      var overlay = $('#overlay');
+      overlay.css('display', 'block');
       $.ajax({
         url: '/handle_action',
         data: json,
@@ -961,11 +973,13 @@
           img.attr('src', 'data:image/png;base64,' + response);
           // Add history item
           self.addHistory(curImg, historyFrame, 'data:image/png;base64,' + response);
+          overlay.css('display', 'none');
 
         },
         error: function(xhr){
           var text = JSON.parse(xhr.responseText);
           alert(text['message']);
+          overlay.css('display', 'none');
         }
       });
     },
@@ -975,7 +989,5 @@
   $.fn.annotator = function(wrapperCanvas, imgURL, wrapperCanvasCtx){
     var annotator = new Annotator(wrapperCanvas, imgURL, wrapperCanvasCtx);
   }
-
-
 
 })(jQuery);

@@ -160,6 +160,7 @@
         self.ctx.drawImage(img, 0, 0, nw, nh);
 
         var wrapperDiv = $('<div id = "wrapperDiv" class = "wrapperD"></div>');
+        var overlay = $('<div id = "overlay"></div>');
         wrapperDiv.css({'background-color':'#000000',
             'width': '65%',
             'height': nh+120,
@@ -168,9 +169,24 @@
             'position': 'relative',
             'margin': '0 auto',
             'overflow': 'auto',
-          });
-        self.$annoCanvas.wrap(wrapperDiv);
+        });
 
+        overlay.css({
+            'position':'absolute',
+            'top':0,
+            'left':0,
+            'right':0,
+            'bottom':0,
+            'background-color':'rgba(0, 0, 0, 0.85)',
+            'background': 'url(data:;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAABl0RVh0U29mdHdhcmUAUGFpbnQuTkVUIHYzLjUuNUmK/OAAAAATSURBVBhXY2RgYNgHxGAAYuwDAA78AjwwRoQYAAAAAElFTkSuQmCC) repeat scroll transparent\9', /* ie fallback png background image */
+            'z-index':'9999',
+            'display': 'none',
+            'color':'white',
+        });
+
+        self.$annoCanvas.wrap(wrapperDiv);
+        console.log(overlay);
+        $('#wrapperDiv').append(overlay);
         self.$ele.annotator(self.$annoCanvas, self.picData, self.ctx);
 
       });
