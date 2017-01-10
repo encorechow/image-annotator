@@ -611,10 +611,12 @@
 
       switch (self.curTool) {
         case 'pen':
-          var color = self.hexToRgb(self.selectedItem['color'])
-          var top = self.historyStack.peek();
-          var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color});
-          var label = self.sendMask(json, curImg, historyFrame);
+          if (self.mousePressed){
+            var color = self.hexToRgb(self.selectedItem['color'])
+            var top = self.historyStack.peek();
+            var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color});
+            var label = self.sendMask(json, curImg, historyFrame);
+          }
           break;
         case 'rectangle':
           self.drawRect(self.ctx, x_off, y_off);
@@ -624,6 +626,7 @@
         default:
           alert('Error!');
           return;
+      }
 
       self.mousePressed = false;
     },
