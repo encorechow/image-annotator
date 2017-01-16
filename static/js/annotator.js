@@ -143,6 +143,7 @@
       this.ctx = wrapperCanvasCtx;
       this.classStack = null;
       this.historyStack = null;
+      this.sendPoly = null;
       this.$classPanelWrapper = null;
       this.$hisPanelWrapper = null;
       this.$toolKitWrapper = null;
@@ -154,6 +155,7 @@
       this.selectedItem = null;
       this.metaData = null;
       this.curTool = null;
+      this.curOverlap = null;
       this.mousePressed = null;
       this.point = null;
       this.curLabel = null;
@@ -177,6 +179,8 @@
       self.point = new Point(0, 0);
       self.polygonPoints = new Array();
       self.curLabel = '';
+      self.curOverlap = '';
+      self.sendPoly = false;
 
       self.polyNum = 0;
       self.lineWidth = 0;
@@ -186,7 +190,7 @@
       self.classStack = new infoStack(self.stackType['class'], 50);
       self.historyStack = new infoStack(self.stackType['history'], 20);
 
-      self.historyStack.add({'image': self.canvasData, 'tool': null, 'record': null, 'label': self.curLabel});
+      self.historyStack.add({'image': self.canvasData, 'tool': null, 'record': null, 'label': self.curLabel, 'overlap': self.curOverlap});
 
       //radius of click around the first point to close the draw of polygon
       self.POLY_END_CLICK_RADIUS = 10;
@@ -293,6 +297,7 @@
       labelImg.css({
         'position': 'relative',
         'display': 'block',
+        'top': '10%',
         'margin': '0 auto',
       });
       self.$labelWrapper.append(labelImg);
@@ -304,6 +309,7 @@
       colorSelector.css({
         'position': 'relative',
         'display': 'block',
+
         'margin': '0 auto',
         'top': 10,
       });
@@ -398,7 +404,7 @@
           self.handleMousemove(e, this)
         },
         mousedown: function(e){
-          self.handleMousedown(e, this);
+          self.handleMousedown(e, this, historyFrame);
         },
         mouseup: function(e){
           self.handleMouseup(e, this, historyFrame);
@@ -426,8 +432,8 @@
           $(this).remove();
         });
         self.historyStack = new infoStack(self.stackType['history'], 20);
-        self.historyStack.add({'image': self.canvasData, 'tool': null, 'record': null});
-        self.renderURL(self.canvasData);
+        self.historyStack.add({'image': self.canvasData, 'tool': null, 'record': null, 'label': '', 'overlap': ''});
+        self.renderURL(self.canvasData, null);
       });
 
 
@@ -455,13 +461,13 @@
         'height': '200px',
         'margin': '0 auto',
       });
-      console.log(canvWrapper.height);
       self.$labelWrapper.css({
         'position': 'relative',
         'display': 'block',
         'background-color': 'black',
         'margin': '0 auto',
         'height': canvWrapper.height(),
+        'overflow': 'auto',
         'width': '65%',
       });
 
@@ -531,9 +537,8 @@
         case 'pen':
           var color = self.hexToRgb(self.selectedItem['color'])
           var top = self.historyStack.peek();
-          console.log(top.label);
-          var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color});
-          var label = self.sendMask(json, curImg, historyFrame);
+          var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData, 'prev': top.label, 'color': color});
+          self.sendMask(json, curImg, historyFrame);
           break;
         // case 'rectangle':
         //   self.drawRect(self.ctx, x_off, y_off);
@@ -551,7 +556,7 @@
 
     },
 
-    handleMousedown: function(e, canvas){
+    handleMousedown: function(e, canvas, historyFrame){
       var self = this;
       e.preventDefault();
       if (!self.curTool || !self.selectedItem){
@@ -570,20 +575,56 @@
           if (self.selectedItem){
             if (self.polyStarted){
               var curPoly = self.polygonPoints[self.polyNum-1]['points'];
-
               // end polygon draw by clicking near the start point or reaching the max num of points
               if(Math.abs(x_off - curPoly[0].x) < self.POLY_END_CLICK_RADIUS && Math.abs(y_off - curPoly[0].y) < self.POLY_END_CLICK_RADIUS) {
                 self.polyStarted = false;
+                self.sendPoly = true;
               } else {
-                curPoly[curPoly.length] = new Point(x_off, y_off);
+                var newPoint = new Point(Math.round(x_off), Math.round(y_off));
+
+                curPoly[curPoly.length] = newPoint;
+                self.metaData[self.metaData.length] = newPoint;
                 if(curPoly.length >= self.POLY_MAX_POINTS) {
                   self.polyStarted = false;
+                  self.sendPoly = true;
                 }
               }
 
             }else{
               // start a polygon draw
               self.drawPolyBegin(x_off, y_off)
+              self.sendPoly = false;
+            }
+            if (self.sendPoly){
+              // Find the rectangle region of drawn polygon
+              var curPoly = self.polygonPoints[self.polyNum-1]['points'];
+              var maxX = Number.MIN_VALUE, maxY = Number.MIN_VALUE, minX = Number.MAX_VALUE, minY = Number.MAX_VALUE;
+              for (var i = 0; i < curPoly.length; i++){
+                var x = curPoly[i].x;
+                var y = curPoly[i].y;
+                maxX = x > maxX ? x : maxX;
+                maxY = y > maxY ? y : maxY;
+                minX = x < minX ? x : minX;
+                minY = y < minY ? y : minY;
+              }
+
+              // For each point in the rectangle region, put into metaData if the point is inside the polygon.
+              for (var r = minX; r <= maxX; r++){
+                for(var c = minY; c <= maxY; c++){
+                  var curPoint = new Point(r, c);
+                  if (self.insidePoly(curPoint, curPoly)){
+                    self.metaData[self.metaData.length] = curPoint;
+                  }
+                }
+              }
+
+              // Send request
+              var curImg = canvas.toDataURL();
+              var color = self.hexToRgb(self.selectedItem['color'])
+              var top = self.historyStack.peek();
+              var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color});
+              self.sendMask(json, curImg, historyFrame);
+
             }
             self.drawPolygon();
           }else{
@@ -615,7 +656,7 @@
             var color = self.hexToRgb(self.selectedItem['color'])
             var top = self.historyStack.peek();
             var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color});
-            var label = self.sendMask(json, curImg, historyFrame);
+            self.sendMask(json, curImg, historyFrame);
           }
           break;
         case 'rectangle':
@@ -787,7 +828,8 @@
       var self = this;
       var points = new Array();
       self.metaData = new Array();
-      points[0] = new Point(x, y)
+      points[0] = new Point(Math.round(x), Math.round(y));
+      self.metaData[0] = points[0]
       var item = {'points': points, 'color': self.selectedItem['color']};
       self.polygonPoints[self.polyNum++] = item;
       self.polyStarted = true;
@@ -856,12 +898,12 @@
       self.drawRect(self.ctx, x, y)
     },
 
-    addHistory: function(img, container, label){
+    addHistory: function(img, container, res){
       var self = this;
       var stack = self.historyStack;
 
       var record = new Record(self.curTool, self.selectedItem['name'], self.selectedItem['color'], self.metaData);
-      var item = {'image': img, 'tool': self.curTool, 'record': record, 'label': label};
+      var item = {'image': img, 'tool': self.curTool, 'record': record, 'label': 'data:image/png;base64,' + res.label, 'overlap': 'data:image/png;base64,' + res.overlap};
 
 
       var state = stack.add(item);
@@ -895,7 +937,7 @@
       var prev = stack.peek();
 
       var url = prev['image'];
-      var label = prev['label'];
+      var label = prev['overlap'];
 
       self.renderURL(url, label);
     },
@@ -909,7 +951,7 @@
         var item = stack.find(stack.size);
         stack.add(item);
         var url = item['image'];
-        var label = item['label'];
+        var label = item['overlap'];
         self.renderURL(url, label);
 
         var hisCell = $('<tr class="hisCell" id=' + stack.size + '><td>'
@@ -947,13 +989,6 @@
 
 
     },
-
-    renderLastestURL: function(){
-      var self = this;
-      var item = self.historyStack.peek();
-      var url = item['image'];
-      self.renderURL(url);
-    },
     hexToRgb: function(hex) {
       var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
       return result ? {
@@ -973,9 +1008,10 @@
         contentType: "application/json",
         success: function(response){
           var img = $('#label-img');
-          img.attr('src', 'data:image/png;base64,' + response);
+
+          img.attr('src', 'data:image/png;base64,' + response.overlap);
           // Add history item
-          self.addHistory(curImg, historyFrame, 'data:image/png;base64,' + response);
+          self.addHistory(curImg, historyFrame, response);
           overlay.css('display', 'none');
 
         },
@@ -985,6 +1021,19 @@
           overlay.css('display', 'none');
         }
       });
+    },
+    // For checking if a point is inside the polygon
+    insidePoly: function(point, poly){
+      var x = point.x, y = point.y;
+      var inside = false;
+      for (var i = 0, j = poly.length - 1; i < poly.length; j = i++){
+        var xi = poly[i].x, yi = poly[i].y;
+        var xj = poly[j].x, yj = poly[j].y;
+
+        var intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
     },
 
   }

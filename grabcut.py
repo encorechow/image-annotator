@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, json, send_file
+from flask import Flask, render_template, request, json, send_file, jsonify
 import numpy as np
 import cv2
 from PIL import Image
@@ -20,6 +20,7 @@ def home():
 @app.route("/handle_action", methods=['POST'])
 def handle_action():
     metaData = request.get_json()
+    print(metaData.keys())
     rawData = metaData['image']
     rawPrev = metaData['prev']
     color = metaData['color']
@@ -50,8 +51,8 @@ def handle_action():
     mask.fill(2)
 
     # Sum all channel up
-    temp = np.sum(prev, axis=-1)
-    mask[temp != 0] = 0
+    # temp = np.sum(prev, axis=-1)
+    # mask[temp != 0] = 0
 
 
     bgdModel = np.zeros((1, 65), dtype=np.float64)
@@ -63,29 +64,18 @@ def handle_action():
         x = point['x']
         y = point['y']
         mask[y, x] = 1
-        print((x, y))
 
     mask, bgdModel,fgdModel = cv2.grabCut(imgArr, mask, None, bgdModel, fgdModel, K, cv2.GC_INIT_WITH_MASK)
 
     outputMask = np.where((mask == 2)|(mask == 0), 0, 1).astype('uint8')
-    outputMask = outputMask[:, :, np.newaxis]
 
-    labelImg = construct_label(outputMask, prev, colorImg)
-    res = server_pil_image(labelImg)
 
-    # labelImg.save('label.png')
+    visual, label = construct_label(outputMask, prev, colorImg, imgArr)
+    labelImg = server_pil_image(label)
+    visualImg = server_pil_image(visual)
 
-    # outputImg = imgArr * outputMask
-    # newImg = Image.fromarray(outputImg)
-    # newImg.save('test.png')
 
-    # reim = Image.fromarray(imgArr)
-    # reim.save('test.png')
-
-    # with open("imgToSave.png", "wb") as fp:
-    #     fp.write(img)
-    # print(metaData['mask'])
-    return res
+    return jsonify({'overlap': visualImg, 'label':labelImg})
 
 
 if __name__ == '__main__':
