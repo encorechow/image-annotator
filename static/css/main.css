@@ -2344,6 +2344,12 @@ table.alt tbody tr td {
   display: inline-block;
   font-size: 18px; }
 
+#selMode {
+  width: 20%;
+  margin: 20px;
+  display: inline-block;
+  font-size: 18px; }
+
 .panel-frame {
   display: inline-block;
   overflow: auto;
@@ -2541,6 +2547,7 @@ table.alt tbody tr td {
 
 /* Main */
 #main {
+  overflow: auto;
   background-color: #ffffff;
   color: #636363;
   border-radius: 0.25em; }

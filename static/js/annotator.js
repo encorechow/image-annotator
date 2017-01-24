@@ -6,13 +6,6 @@
     this.y = y;
   }
 
-  function Record(action, className, colorVal, data){
-    this.action = action;
-    this.className = className;
-    this.colorVal = colorVal;
-    this.data = data;
-  }
-
   /**
      * Function to construct annotator
      * @param {int} type       [Type for using this stack]
@@ -136,7 +129,6 @@
 
   function Annotator(wrapperCanvas, imgURL, wrapperCanvasCtx){
       this.canvas = wrapperCanvas;
-      this.tempCtx = null;
       this.picData = imgURL;
       this.canvasData = null;
       this.stackType = null;
@@ -154,16 +146,11 @@
       // {'name': , 'color': }
       this.selectedItem = null;
       this.metaData = null;
-      this.curTool = null;
-      this.curOverlap = null;
       this.mousePressed = null;
       this.point = null;
-      this.curLabel = null;
       this.polygonPoints = null;
       this.polyStarted = null;
       this.lineWidth = null;
-      this.polyNum = null;
-      this.imgMask = null;
       this.thumbWidth = null;
       this.thumbHeight = null;
       this.init();
@@ -178,11 +165,8 @@
       self.polyStarted = false;
       self.point = new Point(0, 0);
       self.polygonPoints = new Array();
-      self.curLabel = '';
-      self.curOverlap = '';
       self.sendPoly = false;
 
-      self.polyNum = 0;
       self.lineWidth = 0;
       self.stackType ={'class': 0, 'history': 1};
 
@@ -190,7 +174,7 @@
       self.classStack = new infoStack(self.stackType['class'], 50);
       self.historyStack = new infoStack(self.stackType['history'], 20);
 
-      self.historyStack.add({'image': self.canvasData, 'tool': null, 'record': null, 'label': self.curLabel, 'overlap': self.curOverlap});
+      self.historyStack.add({'image': self.canvasData, 'tool': null, 'label': '', 'overlap': ''});
 
       //radius of click around the first point to close the draw of polygon
       self.POLY_END_CLICK_RADIUS = 10;
@@ -207,7 +191,7 @@
       var canvasY = self.canvas.offset().top;
       var canvOffX = self.canvas.parent().offset().left - canvasX;
       var canvOffY = self.canvas.parent().offset().top - canvasY;
-      console.log(self.canvas);
+
       var canvasW = self.canvas.attr('width');
       var canvasH = self.canvas.attr('height');
       self.thumbWidth = parseInt(self.canvas.attr('width'))/12;
@@ -269,13 +253,15 @@
 
       /* sub-elements for tool kit*/
       var lineWidth = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      var algorithms = ['Manual', 'GrabCut'];
       var titleTool = $('<p class="module-title">Toolkit</p>')
       var pencil = $('<span class="toolkit-item"><i class="fa fa-pencil" aria-hidden="true"></i>&nbsp pen</span>');
       var polygon = $('<span class="toolkit-item"><i class="fa fa-map-o" aria-hidden="true"></i>&nbsp polygon</span>')
-      var rectangle = $('<span class="toolkit-item"><i class="fa fa-square-o" aria-hidden="true"></i>&nbsp rectangle</span>');
-      var lineWidthText = $('<br/><span style="font-size:18px">line width</span>');
+      // var rectangle = $('<span class="toolkit-item"><i class="fa fa-square-o" aria-hidden="true"></i>&nbsp rectangle</span>');
+      var lineWidthText = $('<br/><span style="font-size:18px;display:inline-block">line width</span>');
       var strokeOptions = $('<select id="selWidth" ></select>');
-
+      var modeText = $('<span style="font-size:18px;display:inline-block">mode</span>');
+      var modeOptions = $('<select id="selMode"></select>');
 
 
       for (var i = 0; i < lineWidth.length; i++){
@@ -283,15 +269,23 @@
         strokeOptions.append(option);
       }
 
+      for (var i = 0; i < algorithms.length; i++){
+        var mode = $('<option value=' + algorithms[i] + '>' + algorithms[i] + '</option>');
+        modeOptions.append(mode);
+      }
+
+
       self.lineWidth = parseInt(strokeOptions.val());
 
       self.$toolKitWrapper.append(titleTool);
       self.$toolKitWrapper.append(pencil);
       self.$toolKitWrapper.append(polygon);
-      self.$toolKitWrapper.append(rectangle);
+
       self.$toolKitWrapper.append(lineWidthText);
       self.$toolKitWrapper.append(strokeOptions);
 
+      self.$toolKitWrapper.append(modeText);
+      self.$toolKitWrapper.append(modeOptions);
       /* sub-elements for labelWrapper */
       var labelImg = $('<img id="label-img">')
       labelImg.css({
@@ -385,9 +379,9 @@
       $(document).on('click', '.toolkit-item', function(e){
         var selected = $(this).hasClass('highlight');
         $('.toolkit-item').removeClass('highlight');
-        if(!selected)
+        if(!selected){
             $(this).addClass('highlight');
-            if (self.curTool === 'polygon'){
+            if (self.curTool === 'polygon' && self.polyStarted === true){
               self.polyStarted = false;
               self.drawPolygon();
               self.mousePressed = false;
@@ -395,6 +389,7 @@
               // Add history item
               self.addHistory(curImg, historyFrame);
             }
+        }
         self.curTool = $(this).text().trim();
         self.metaData = new Array();
       });
@@ -432,8 +427,9 @@
           $(this).remove();
         });
         self.historyStack = new infoStack(self.stackType['history'], 20);
-        self.historyStack.add({'image': self.canvasData, 'tool': null, 'record': null, 'label': '', 'overlap': ''});
+        self.historyStack.add({'image': self.canvasData, 'tool': null, 'label': '', 'overlap': ''});
         self.renderURL(self.canvasData, null);
+        self.polygonPoints = new Array();
       });
 
 
@@ -515,8 +511,8 @@
           break;
         case 'polygon':
           break;
-        case 'rectangle':
-          break;
+        // case 'rectangle':
+        //   break;
       }
 
     },
@@ -551,7 +547,6 @@
       }
 
       self.mousePressed = false;
-      console.log(self.metaData);
       self.metaData = new Array();
 
     },
@@ -574,7 +569,7 @@
           // if start a polygon draw
           if (self.selectedItem){
             if (self.polyStarted){
-              var curPoly = self.polygonPoints[self.polyNum-1]['points'];
+              var curPoly = self.polygonPoints[self.polygonPoints.length-1]['points'];
               // end polygon draw by clicking near the start point or reaching the max num of points
               if(Math.abs(x_off - curPoly[0].x) < self.POLY_END_CLICK_RADIUS && Math.abs(y_off - curPoly[0].y) < self.POLY_END_CLICK_RADIUS) {
                 self.polyStarted = false;
@@ -597,7 +592,7 @@
             }
             if (self.sendPoly){
               // Find the rectangle region of drawn polygon
-              var curPoly = self.polygonPoints[self.polyNum-1]['points'];
+              var curPoly = self.polygonPoints[self.polygonPoints.length-1]['points'];
               var maxX = Number.MIN_VALUE, maxY = Number.MIN_VALUE, minX = Number.MAX_VALUE, minY = Number.MAX_VALUE;
               for (var i = 0; i < curPoly.length; i++){
                 var x = curPoly[i].x;
@@ -632,9 +627,9 @@
             return;
           }
           break;
-        case 'rectangle':
-          self.drawRectBegin(x_off, y_off);
-          break;
+        // case 'rectangle':
+        //   self.drawRectBegin(x_off, y_off);
+        //   break;
       }
 
     },
@@ -659,9 +654,9 @@
             self.sendMask(json, curImg, historyFrame);
           }
           break;
-        case 'rectangle':
-          self.drawRect(self.ctx, x_off, y_off);
-          break;
+        // case 'rectangle':
+        //   self.drawRect(self.ctx, x_off, y_off);
+        //   break;
         case 'polygon':
           break;
         default:
@@ -764,12 +759,7 @@
         var correction = Math.floor(self.lineWidth / 2);
         self.ctx.fillStyle = "rgba("+r+","+g+","+b+","+(255/255)+")";
         self.ctx.fillRect(round_x-correction, round_y-correction, self.lineWidth, self.lineWidth );
-        // self.ctx.lineJoin = 'round';
-        // self.ctx.moveTo(self.point.x, self.point.y);
-        // self.ctx.lineTo(x, y);
-        // self.ctx.closePath();
-        // self.ctx.stroke();
-        //
+
         // // line equation: y-y1 = (y2-y1)/(x2-x1) * (x-x1) derived: (y1-y2) * x + (x2-x1) * y + (x1-x2)*y1 + (y2-y1)*x1 = 0
         var a = self.point.y - y;
         var b = x - self.point.x;
@@ -810,7 +800,6 @@
 
         self.point.x = x;
         self.point.y = y;
-        console.log(round_x, round_y);
         if (round_x != self.metaData[length-1].x || round_y != self.metaData[length-1].y){
           console.log(round_x-correction,round_x-correction + self.lineWidth)
           for (var start_x = round_x-correction; start_x < round_x-correction + self.lineWidth; start_x++){
@@ -831,7 +820,7 @@
       points[0] = new Point(Math.round(x), Math.round(y));
       self.metaData[0] = points[0]
       var item = {'points': points, 'color': self.selectedItem['color']};
-      self.polygonPoints[self.polyNum++] = item;
+      self.polygonPoints[self.polygonPoints.length] = item;
       self.polyStarted = true;
     },
 
@@ -840,14 +829,15 @@
       if (!self.selectedItem){
         return;
       }
-
-      for (var k = 0; k < self.polyNum; k++){
+      self.ctx.fillStyle = "#000000";
+      for (var k = 0; k < self.polygonPoints.length; k++){
         self.ctx.beginPath();
         var item = self.polygonPoints[k];
         var points = item['points'];
         var color = item['color'];
         self.ctx.strokeStyle = '#' + color.toString();
         self.ctx.lineWidth = self.lineWidth;
+
 
         if(points != null && points.length > 0) {
           self.ctx.moveTo(points[0].x, points[0].y);
@@ -866,44 +856,39 @@
       }
 
     },
+    // drawRectBegin: function(x, y){
+    //   var self = this;
+    //   self.mousePressed = true;
+    //   self.point.x = x;
+    //   self.point.y = y;
+    // },
+    //
+    // drawRect: function(ctx, x, y){
+    //   var self = this;
+    //   if (!self.selectedItem){
+    //     return;
+    //   }
+    //
+    //   var h = y - self.point.y;
+    //   var w = x - self.point.x
+    //   var color = self.selectedItem['color'];
+    //   ctx.beginPath();
+    //   ctx.rect(self.point.x, self.point.y , w, h);
+    //   ctx.fillStyle = 'transparent';
+    //   ctx.fill();
+    //   ctx.lineWidth = self.lineWidth;
+    //   ctx.strokeStyle = '#' + color.toString();
+    //   ctx.stroke();
+    //
+    // },
 
-    drawRectBegin: function(x, y){
-      var self = this;
-      self.mousePressed = true;
-      self.point.x = x;
-      self.point.y = y;
-    },
-
-    drawRect: function(ctx, x, y){
-      var self = this;
-      if (!self.selectedItem){
-        return;
-      }
-
-      var h = y - self.point.y;
-      var w = x - self.point.x
-      var color = self.selectedItem['color'];
-      ctx.beginPath();
-      ctx.rect(self.point.x, self.point.y , w, h);
-      ctx.fillStyle = 'transparent';
-      ctx.fill();
-      ctx.lineWidth = self.lineWidth;
-      ctx.strokeStyle = '#' + color.toString();
-      ctx.stroke();
-
-    },
-
-    drawRectToReal: function(x, y){
-      var self = this;
-      self.drawRect(self.ctx, x, y)
-    },
 
     addHistory: function(img, container, res){
       var self = this;
       var stack = self.historyStack;
 
-      var record = new Record(self.curTool, self.selectedItem['name'], self.selectedItem['color'], self.metaData);
-      var item = {'image': img, 'tool': self.curTool, 'record': record, 'label': 'data:image/png;base64,' + res.label, 'overlap': 'data:image/png;base64,' + res.overlap};
+      //var record = new Record(self.curTool, self.selectedItem['name'], self.selectedItem['color'], self.metaData);
+      var item = {'image': img, 'tool': self.curTool, 'label': 'data:image/png;base64,' + res.label, 'overlap': 'data:image/png;base64,' + res.overlap};
 
 
       var state = stack.add(item);

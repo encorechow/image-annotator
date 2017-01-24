@@ -46,6 +46,7 @@ def construct_label(mask, prev, colorImg, img):
         match = np.any(isOverlap, axis=-1)
         img[match, :] = 0
 
+        # Image attached with transparent mask
         attached = np.add(labelArr, img)
 
         # Add transparent
