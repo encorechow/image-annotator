@@ -25,6 +25,7 @@ def handle_action():
     rawPrev = metaData['prev']
     color = metaData['color']
     points = metaData['mask']
+    mode = metaData['mode']
     K = 5
 
     if len(points) <= K:
@@ -48,7 +49,8 @@ def handle_action():
 
 
     mask = np.zeros(imgArr.shape[:2], dtype=np.uint8)
-    mask.fill(2)
+    if mode == "GrabCut":
+        mask.fill(2)
 
     # Sum all channel up
     # temp = np.sum(prev, axis=-1)
@@ -58,16 +60,21 @@ def handle_action():
     bgdModel = np.zeros((1, 65), dtype=np.float64)
     fgdModel = np.zeros((1, 65), dtype=np.float64)
 
-
-
     for point in points:
         x = point['x']
         y = point['y']
         mask[y, x] = 1
 
-    mask, bgdModel,fgdModel = cv2.grabCut(imgArr, mask, None, bgdModel, fgdModel, K, cv2.GC_INIT_WITH_MASK)
 
-    outputMask = np.where((mask == 2)|(mask == 0), 0, 1).astype('uint8')
+
+
+    if mode == "GrabCut":
+        mask, bgdModel,fgdModel = cv2.grabCut(imgArr, mask, None, bgdModel, fgdModel, K, cv2.GC_INIT_WITH_MASK)
+        outputMask = np.where((mask == 2)|(mask == 0), 0, 1).astype('uint8')
+    elif mode == "Manual":
+        outputMask = mask
+    else:
+        return json.dumps({'success':False, 'message': 'Invalid mode.'}), 400, {'ContentType':'application/json'}
 
 
     visual, label = construct_label(outputMask, prev, colorImg, imgArr)

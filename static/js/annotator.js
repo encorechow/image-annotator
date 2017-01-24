@@ -133,9 +133,12 @@
       this.canvasData = null;
       this.stackType = null;
       this.ctx = wrapperCanvasCtx;
+      // recording stacks
       this.classStack = null;
       this.historyStack = null;
+      // ready to send polygon mask or not
       this.sendPoly = null;
+      // jQuery element for globally using
       this.$classPanelWrapper = null;
       this.$hisPanelWrapper = null;
       this.$toolKitWrapper = null;
@@ -145,12 +148,23 @@
       this.$labelWrapper = null;
       // {'name': , 'color': }
       this.selectedItem = null;
+      // current tool
+      this.curTool = null;
+      // current Mode
+      this.curMode = null;
+      // meta data for recording the masked pixels
       this.metaData = null;
+      // check if mouse pressed for drawing lines
       this.mousePressed = null;
+      // record the point before mouse action
       this.point = null;
+      // all polygon points
       this.polygonPoints = null;
+      // check if start a polygon draw
       this.polyStarted = null;
+      // line width for pen
       this.lineWidth = null;
+      // thumbnails' size
       this.thumbWidth = null;
       this.thumbHeight = null;
       this.init();
@@ -168,6 +182,7 @@
       self.sendPoly = false;
 
       self.lineWidth = 0;
+      // type of usage of stack.
       self.stackType ={'class': 0, 'history': 1};
 
       self.canvasData = self.canvas[0].toDataURL();
@@ -197,7 +212,7 @@
       self.thumbWidth = parseInt(self.canvas.attr('width'))/12;
       self.thumbHeight = parseInt(self.canvas.attr('height'))/12;
 
-      // type of usage of stack.
+
 
       // Get main div jquery wrapper
       var main = self.canvas.parent().parent().parent();
@@ -253,11 +268,10 @@
 
       /* sub-elements for tool kit*/
       var lineWidth = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-      var algorithms = ['Manual', 'GrabCut'];
+      var algorithms = ['GrabCut', 'Manual'];
       var titleTool = $('<p class="module-title">Toolkit</p>')
       var pencil = $('<span class="toolkit-item"><i class="fa fa-pencil" aria-hidden="true"></i>&nbsp pen</span>');
       var polygon = $('<span class="toolkit-item"><i class="fa fa-map-o" aria-hidden="true"></i>&nbsp polygon</span>')
-      // var rectangle = $('<span class="toolkit-item"><i class="fa fa-square-o" aria-hidden="true"></i>&nbsp rectangle</span>');
       var lineWidthText = $('<br/><span style="font-size:18px;display:inline-block">line width</span>');
       var strokeOptions = $('<select id="selWidth" ></select>');
       var modeText = $('<span style="font-size:18px;display:inline-block">mode</span>');
@@ -276,6 +290,7 @@
 
 
       self.lineWidth = parseInt(strokeOptions.val());
+      self.curMode = modeOptions.val();
 
       self.$toolKitWrapper.append(titleTool);
       self.$toolKitWrapper.append(pencil);
@@ -329,9 +344,7 @@
         var enteredName = nameTextBox.val();
         var item = {'name': enteredName, 'color': pickedColor};
         self.addAnnoClass(item, selectFrame, errorMsg);
-
-        // colorSelector.css('background-color', '#' + defaultColor.toString());
-        // hiddenInput.val(defaultColor);
+        
         nameTextBox.val('');
       });
 
@@ -411,6 +424,9 @@
 
       strokeOptions.on('change', function(e){
         self.lineWidth = parseInt($(this).val());
+      });
+      modeOptions.on('change', function(e){
+        self.curMode = $(this).val();
       });
 
 
@@ -533,7 +549,7 @@
         case 'pen':
           var color = self.hexToRgb(self.selectedItem['color'])
           var top = self.historyStack.peek();
-          var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData, 'prev': top.label, 'color': color});
+          var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData, 'prev': top.label, 'color': color, 'mode': self.curMode});
           self.sendMask(json, curImg, historyFrame);
           break;
         // case 'rectangle':
@@ -617,7 +633,7 @@
               var curImg = canvas.toDataURL();
               var color = self.hexToRgb(self.selectedItem['color'])
               var top = self.historyStack.peek();
-              var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color});
+              var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color, 'mode': self.curMode});
               self.sendMask(json, curImg, historyFrame);
 
             }
@@ -650,13 +666,10 @@
           if (self.mousePressed){
             var color = self.hexToRgb(self.selectedItem['color'])
             var top = self.historyStack.peek();
-            var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color});
+            var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color, 'mode': self.curMode});
             self.sendMask(json, curImg, historyFrame);
           }
           break;
-        // case 'rectangle':
-        //   self.drawRect(self.ctx, x_off, y_off);
-        //   break;
         case 'polygon':
           break;
         default:
@@ -887,7 +900,6 @@
       var self = this;
       var stack = self.historyStack;
 
-      //var record = new Record(self.curTool, self.selectedItem['name'], self.selectedItem['color'], self.metaData);
       var item = {'image': img, 'tool': self.curTool, 'label': 'data:image/png;base64,' + res.label, 'overlap': 'data:image/png;base64,' + res.overlap};
 
 
