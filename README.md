@@ -1,4 +1,4 @@
-# Multi-class Image Segmentation Annotator
+# Multi-class Image Segments Annotator
 This is a web application for custom multi-class annotation. The current applied algorithm in back-end is GrabCut. We may switch to other more efficient algorithms later, but for the sake of completion of the application, we will keep use GrabCut for the moment. There is also a manual mode for fine-tuning.
 
 
