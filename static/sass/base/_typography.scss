@@ -36,7 +36,7 @@
 			'border-bottom #{_duration(transition)} ease'
 		));
 		text-decoration: none;
-		border-bottom: dotted 1px;
+		//border-bottom: dotted 1px;
 		color: inherit;
 
 		&:hover {
@@ -156,7 +156,7 @@
 	hr {
 		border: 0;
 		border-bottom: solid 1px;
-		margin: _size(element-margin) 0;
+		//margin: _size(element-margin) 0;
 
 		&.major {
 			margin: (_size(element-margin) * 1.5) 0;

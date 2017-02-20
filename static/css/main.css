@@ -1300,7 +1300,6 @@ a {
   -ms-transition: color 0.2s ease, border-bottom 0.2s ease;
   transition: color 0.2s ease, border-bottom 0.2s ease;
   text-decoration: none;
-  border-bottom: dotted 1px;
   color: inherit; }
   a:hover {
     border-bottom-color: transparent; }
@@ -1392,8 +1391,7 @@ pre {
 
 hr {
   border: 0;
-  border-bottom: solid 1px;
-  margin: 2em 0; }
+  border-bottom: solid 1px; }
   hr.major {
     margin: 3em 0; }
 
@@ -2364,14 +2362,22 @@ table.alt tbody tr td {
     border: 1px !important; }
   .panel-frame th {
     color: white !important; }
+  .panel-frame tbody, .panel-frame tr {
+    width: inherit;
+    display: inline-block; }
   .panel-frame thead {
+    display: inline-block;
+    width: inherit;
     background-color: black; }
 
 #selectFrame {
   height: 300px; }
 
+#selectHieFrame {
+  height: 350px; }
+
 #historyFrame {
-  height: 400px; }
+  height: 500px; }
 
 .op-his {
   position: relative;
@@ -2384,6 +2390,61 @@ table.alt tbody tr td {
   font-family: "Monaco" !important;
   font-size: 18px;
   margin: 5px; }
+
+/* tabs */
+.tabsWrapper {
+  position: relative;
+  height: 60px;
+  padding: 5px; }
+
+ul.tabs {
+  list-style-type: none;
+  margin: 0;
+  padding: 0; }
+  ul.tabs li {
+    border: gray solid 1px;
+    width: 47%;
+    float: left;
+    margin: 0 .25em 0 0;
+    padding: .25em .25em; }
+  ul.tabs a {
+    color: gray;
+    font-weight: bold;
+    text-decoration: none !important;
+    font-size: 1vw; }
+  ul.tabs li.active {
+    background: gray; }
+    ul.tabs li.active a {
+      color: white; }
+
+/* Hierarchy */
+.hierarchy-div {
+  display: inline-block;
+  width: 100%;
+  font-size: 16px;
+  text-align: left;
+  border: 1px solid black !important;
+  margin-top: 20px;
+  margin-bottom: 0px;
+  overflow: auto; }
+  .hierarchy-div li {
+    padding: 0; }
+
+#hieopt {
+  display: inline-block;
+  height: 30px;
+  width: 80%;
+  margin-top: 10px;
+  font-size: 16px; }
+
+.disable-hie {
+  color: #d6d6d6 !important; }
+
+.highlight-hie {
+  background-color: #90b9f9; }
+
+.highlight-class {
+  background-color: #93add6; }
 
 /* Header */
 #header {

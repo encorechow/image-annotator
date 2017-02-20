@@ -136,12 +136,18 @@
       // recording stacks
       this.classStack = null;
       this.historyStack = null;
+      this.uniqueId = null;
+      this.selectedHie = null;
+      // {'name': string, 'id': id, 'classes': {'name': string, 'color': string, 'uid', int, 'node': classnode}, 'node': node, 'object': object label}
+      this.hierarchyStack = null;
       // ready to send polygon mask or not
       this.sendPoly = null;
       // jQuery element for globally using
       this.$classPanelWrapper = null;
       this.$hisPanelWrapper = null;
       this.$toolKitWrapper = null;
+      this.$hierarchyWrapper = null;
+      this.$optionsWrapper = null;
       this.$toolKit = null;
       this.$hisPanel = null;
       this.$classPanel = null;
@@ -180,7 +186,7 @@
       self.point = new Point(0, 0);
       self.polygonPoints = new Array();
       self.sendPoly = false;
-
+      self.uniqueId = 0;
       self.lineWidth = 0;
       // type of usage of stack.
       self.stackType ={'class': 0, 'history': 1};
@@ -188,6 +194,7 @@
       self.canvasData = self.canvas[0].toDataURL();
       self.classStack = new infoStack(self.stackType['class'], 50);
       self.historyStack = new infoStack(self.stackType['history'], 20);
+      self.hierarchyStack = new infoStack(self.stackType['class'], 50);
 
       self.historyStack.add({'image': self.canvasData, 'tool': null, 'label': '', 'overlap': ''});
 
@@ -197,10 +204,12 @@
       self.POLY_MAX_POINTS = 8;
 
 
-      self.$classPanelWrapper = $('<div class="panelwrapper"></div>');
+      self.$optionsWrapper = $('<div class="optionswrapper panelwrapper "></div>');
+      self.$classPanelWrapper = $('<div id="class-tab" class="optionsele panelwrapper"></div>');
       self.$hisPanelWrapper = $('<div class="panelwrapper"></div>');
       self.$toolKitWrapper = $('<div class="toolwrapper"></div>');
-      self.$labelWrapper = $('<div class="labelwrapper"></div>')
+      self.$labelWrapper = $('<div class="labelwrapper"></div>');
+      self.$hierarchyWrapper = $('<div id="hierarchy-tab" class="optionsele hierarchywrapper"></div>');
 
       var canvasX = self.canvas.offset().left;
       var canvasY = self.canvas.offset().top;
@@ -223,6 +232,9 @@
 
 
 
+
+
+
       /* sub-elements for class panel */
       var titleClass = $('<p class="module-title">Class Panel</p>')
       var nameTextBox = $('<input id="classname" type="text" style="font-size: 20px" name="customclass" placeholder="enter a class name">');
@@ -232,10 +244,16 @@
       var colorSelector = $('#colorSelector');
       var hiddenInput = $('#color_value');
       var selectFrame = $('<table id="selectFrame" class="table table-hover panel-frame"></table>');
+      var addToHieBtn = $('<button id="tohie" class="dicisionBtn">add to</button>');
+      var hieOptions = $('<select id="hieopt" class="dicisionBtn"></select>');
       var deleteBtn = $('<button id="delete" class="decisionBtn">delete</button>');
-      var deleteAllBtn = $('<button id="deleteall" class="decisionBtn">delete all</button>')
+      var deleteAllBtn = $('<button id="deleteall" class="decisionBtn">delete all</button>');
+      var connectWrapper = $('<div></div>');
 
-      selectFrame.append($('<thead><tr><th>Name</th><th>Color</th></tr></thead><tbody id="panelBody"></tbody>'))
+      connectWrapper.append(addToHieBtn);
+      connectWrapper.append(hieOptions);
+
+      selectFrame.append($('<thead><tr><th>Name</th><th>Color</th></tr></thead><tbody id="panelBody"></tbody>'));
 
 
       var defaultColor = hiddenInput.val();
@@ -248,6 +266,7 @@
       self.$classPanelWrapper.append(addBtn);
       self.$classPanelWrapper.append(clearBtn);
       self.$classPanelWrapper.append(selectFrame);
+      self.$classPanelWrapper.append(connectWrapper);
       self.$classPanelWrapper.append(deleteBtn);
       self.$classPanelWrapper.append(deleteAllBtn);
 
@@ -313,12 +332,239 @@
 
 
 
+      /* sub-elements for hierarchy */
+      var titleHie = $('<p class="module-title">Hierarchy Panel</p>')
+      var hieNameTextBox = $('<input id="hiename" type="text" style="font-size: 20px" name="customhie" placeholder="enter a hierarchy name">');
+      // TODO: change the variables name
+      var addHieBtn = $('<button id="addHie" class="decisionBtn add-hie">add</button>');
+      var errorHieMsg = $('<p id="errorMsg" class="error" style="display: none"></p>')
+      var clearHieBtn = $('<button id="clear" class="decisionBtn">clear</button>');
+      var selectHieFrame = $('<div id="selectHieFrame" class="hierarchy-div"></div>');
+      var deleteHieBtn = $('<button id="deleteHie" class="decisionBtn">delete</button>');
+      var deleteAllHieBtn = $('<button id="deleteAllHie" class="decisionBtn">delete all</button>')
+
+
+
+      selectHieFrame.tree({
+        data: null,
+        onCreateLi: function(node, $li) {
+          $li.find('.jqtree-title').after('<div id=hie' + node.id + ' style="display:none;"></div>');
+        },
+      });
+
+      self.$hierarchyWrapper.append(titleHie);
+      self.$hierarchyWrapper.append(hieNameTextBox);
+      self.$hierarchyWrapper.append(errorHieMsg);
+      self.$hierarchyWrapper.append(addHieBtn);
+      self.$hierarchyWrapper.append(clearHieBtn);
+      self.$hierarchyWrapper.append(selectHieFrame);
+      self.$hierarchyWrapper.append(deleteHieBtn);
+      self.$hierarchyWrapper.append(deleteAllHieBtn);
+
+
+
+      /* actions for hierarchy panel */
+      addHieBtn.on('click', function(){
+        var hieName = hieNameTextBox.val();
+        var item = {'name': hieName, 'classes': new Array()};
+        self.addHierarchy(item, selectHieFrame, errorHieMsg, hieOptions);
+        hieNameTextBox.val('');
+      });
+
+      hieNameTextBox.on('focus', function(e){
+        e.preventDefault();
+        errorHieMsg.hide();
+      });
+
+      clearHieBtn.on('click', function(e){
+        e.preventDefault();
+        errorHieMsg.hide();
+        hieNameTextBox.val('');
+      })
+
+      //TODO: click actions and delete actions
+      selectHieFrame.bind('tree.click', function(e){
+        e.preventDefault();
+        var node = e.node;
+        var stack = self.hierarchyStack;
+        var item = null;
+        if (node['color']){
+          var parentNode = node.parent;
+
+          var selectedParent = $(parentNode.element).children('div').hasClass('highlight-hie');
+
+          // Check if current hierarchy has been selected
+          if (selectedParent){
+            var selectedClass = $(node.element).children('div').hasClass('highlight-class');
+
+            // Remove all highlight of classes
+            for (var i = 0; i < parentNode.children.length; i++){
+              var child = parentNode.children[i]
+              $(child.element).children('div').removeClass('highlight-class');
+            }
+
+            // Add the highlight on selected class
+            if (!selectedClass){
+              $(node.element).children('div').addClass('highlight-class');
+              self.selectedItem = {'name': node['name'], 'color': node['color']}
+            }else{
+              self.selectedItem = null;
+            }
+
+          // Selected class is not in current hierarchy
+          }else{
+            alert('Please select the class in current hierarchy!');
+          }
+
+        }else{
+          var selected = $(node.element).children('div').hasClass('highlight-hie');
+
+          for (var i = 0; i < stack.getSize(); i++){
+            var sibling = stack.find(i);
+            // remove the highlight-hie class for hierarchies
+            $(sibling.node.element).children('div').removeClass('highlight-hie');
+            if (sibling.id != node.id){
+              var children = sibling.node.children;
+
+              // add the disable-hie class to all children
+              for (var j = 0; j < children.length; j++){
+                $(children[j].element).children('div').children('span').addClass('disable-hie');
+                $(children[j].element).children('div').removeClass('highlight-class');
+              }
+            }else{
+              item = sibling;
+            }
+          }
+          if (!selected){
+            $(node.element).children('div').addClass('highlight-hie');
+            for (var i = 0; i < node.children.length; i++){
+              $(node.children[i].element).children('div').children('span').removeClass('disable-hie');
+            }
+            self.selectedItem = null;
+            self.selectedHie = item;
+            self.highlightObject();
+          }else{
+            self.selectedHie = null;
+            self.selectedItem = null;
+            for (var i = 0; i < stack.getSize(); i++){
+              var cur = stack.find(i);
+              for (var j = 0; j < cur.node.children.length; j++){
+                $(cur.node.children[j].element).children('div').children('span').removeClass('disable-hie');
+                $(cur.node.children[j].element).children('div').removeClass('highlight-class');
+              }
+            }
+          }
+
+        }
+      });
+
+      deleteHieBtn.on('click', function(e){
+        e.preventDefault();
+        var hie = self.selectedHie;
+        var stack = self.hierarchyStack;
+        if (!hie){
+          alert('Please select a item to delete.');
+          return false;
+        }
+
+        // if selected is an class
+
+        for (var i = 0; i < stack.getSize(); i++){
+          var element = stack.find(i);
+            // Find corresponding hierarchy
+          if (element['id'] == hie['id']){
+            if (self.selectedItem){
+              var classes = element['classes'];
+              for (var j = 0; j < classes.length; j++){
+                if (self.selectedItem['color'] === classes[j]['color']){
+
+                  // remove from tree
+                  selectHieFrame.tree('removeNode', classes[j]['node']);
+
+                  // re-render the color block
+                  for (var i = 0; i < element['node'].children.length; i++){
+                    var divId = element['node'].children[i].id;
+                    var divColor = element['node'].children[i].color;
+
+                    var colorBlock = $('#hie' + divId + '');
+
+                    colorBlock.css({
+                      'display': 'inline-block',
+                      'width': '20px',
+                      'height': '20px',
+                      'float': 'right',
+                      'margin-right': '20px',
+                      'background-color': '#' + divColor,
+                    });
+                  }
+                  $(element['node'].element).children('div').addClass('highlight-hie');
+
+                  // remove from stack
+                  classes.splice(j, 1);
+                  break;
+                }
+              }
+            // if selected is a hierarchy tab, then remove this hierarchy and its classes
+            }else{
+              selectHieFrame.tree('removeNode', element['node']);
+              self.selectedHie = null;
+              hieOptions.find('option').filter(function(i, e){
+                return $(e).val() == element['node'].id;
+              }).remove();
+              stack.delete(i);
+
+              var root = selectHieFrame.tree('getTree');
+              var nodes = root['children'];
+
+              for (var k = 0; k < nodes.length; k++){
+                var node = nodes[k];
+                for (var i = 0; i < node.children.length; i++){
+                  var divId = node.children[i].id;
+                  var divColor = node.children[i].color;
+
+                  var colorBlock = $('#hie' + divId + '');
+
+                  colorBlock.css({
+                    'display': 'inline-block',
+                    'width': '20px',
+                    'height': '20px',
+                    'float': 'right',
+                    'margin-right': '20px',
+                    'background-color': '#' + divColor,
+                  });
+                }
+              }
+            }
+            self.selectedItem = null;
+            break;
+          }
+        }
+
+      });
+
+      deleteAllHieBtn.on('click', function(e){
+        e.preventDefault();
+        self.selectedItem = null;
+        self.selectedHie = null;
+        self.hierarchyStack = new infoStack(self.stackType['class'], 50);
+        var tree = selectHieFrame.tree('getTree');
+        var children = tree['children'];
+
+        // Remove all nodes in hierarchy
+        while (children.length != 0){
+          selectHieFrame.tree('removeNode', children[children.length-1]);
+        }
+
+        // Remove options in select tag
+        hieOptions.find('option').remove();
+
+      });
+
 
       /* actions for class panel*/
       colorSelector.css({
         'position': 'relative',
         'display': 'block',
-
         'margin': '0 auto',
         'top': 10,
       });
@@ -344,7 +590,7 @@
         var enteredName = nameTextBox.val();
         var item = {'name': enteredName, 'color': pickedColor};
         self.addAnnoClass(item, selectFrame, errorMsg);
-        
+
         nameTextBox.val('');
       });
 
@@ -354,7 +600,13 @@
         colorSelector.css('background-color', '#' + defaultColor.toString());
         hiddenInput.val(defaultColor);
         nameTextBox.val('');
-      })
+      });
+
+      addToHieBtn.on('click', function(e){
+        e.preventDefault();
+        var chosenHie = hieOptions.val();
+        self.addSubNode(chosenHie, selectHieFrame);
+      });
 
       deleteBtn.on('click', function(e){
         var candidates = $('#selectFrame > tbody > tr');
@@ -379,11 +631,15 @@
         e.preventDefault();
         var selected = $(this).hasClass("highlight");
         $('#selectFrame > tbody > tr').removeClass("highlight");
-        if(!selected)
-            $(this).addClass("highlight");
-        var idx = $(this).attr('id');
-        var item = self.classStack.data[idx];
-        self.selectedItem = item;
+        if(!selected){
+          $(this).addClass("highlight");
+          var idx = $(this).attr('id');
+          var item = self.classStack.data[idx];
+          self.selectedItem = item;
+        }else{
+          self.selectedItem = null;
+        }
+
 
       });
 
@@ -455,14 +711,24 @@
 
 
       // Style of wrappers
-      self.$classPanelWrapper.css({
+      self.$optionsWrapper.css({
         'width': panelWidth,
-        'height': '600px',
+        'height': '750px',
+      })
+
+      self.$classPanelWrapper.css({
+        'width': '100%',
+        'height': '650px',
       });
+
+      self.$hierarchyWrapper.css({
+        'width': '100%',
+        'height': '600px',
+      })
 
       self.$hisPanelWrapper.css({
         'width': panelWidth,
-        'height': '600px',
+        'height': '700px',
       });
 
       self.$toolKitWrapper.css({
@@ -485,26 +751,70 @@
 
 
 
+      /* Tabs for options */
+      var tabsWrapper = $('<div class="tabsWrapper"></div>');
+      var classPanelOption = $('<li><a href="#class-tab">Class</a></li>');
+      var hierarchyPanelOption = $('<li><a href="#hierarchy-tab">Hierarchy</a></li>');
+      var tabsBar = $('<ul class="tabs"></ul>');
+      var separator = $('<hr/>');
+
+      tabsBar.append(classPanelOption);
+      tabsBar.append(hierarchyPanelOption);
+      tabsWrapper.append(tabsBar);
+
+
+
+      self.$optionsWrapper.append(tabsWrapper);
+      self.$optionsWrapper.append(separator);
+      self.$optionsWrapper.append(self.$classPanelWrapper);
+      self.$optionsWrapper.append(self.$hierarchyWrapper);
+
+
       self.$toolKitWrapper.insertBefore(canvWrapper);
-      self.$classPanelWrapper.insertBefore(canvWrapper);
+      self.$optionsWrapper.insertBefore(canvWrapper);
       self.$labelWrapper.insertAfter(canvWrapper);
+      $('<hr/>').insertAfter(canvWrapper);
       self.$hisPanelWrapper.insertAfter(canvWrapper);
 
 
-      panelWidth = self.$classPanelWrapper.width();
+
+      panelWidth = self.$optionsWrapper.width();
       // offset is calculated by the width of main div substract the width of canvas and two panels,
       // then divided by 2. This is distance between canvas and panels. 20 bias term for move inside a little bit.
       var offset = (mainWidth - canvWrapper.width() - 2 * panelWidth) / 2 - 20;
 
-      self.$classPanelWrapper.css('right', offset);
+      self.$optionsWrapper.css('right', offset);
       self.$hisPanelWrapper.css('left', offset);
 
       $(window).resize(function() {
         var mainWidth = main.width();
-        var panelWidth = self.$classPanelWrapper.width();
+        var panelWidth = self.$optionsWrapper.width();
         var offset = (mainWidth - canvWrapper.width() - 2 * panelWidth) / 2 - 20;
-        self.$classPanelWrapper.css('right', offset);
+        self.$optionsWrapper.css('right', offset);
         self.$hisPanelWrapper.css('left', offset);
+      });
+
+
+      // Switch between tabs
+      $('ul.tabs li:first').addClass('active');
+      self.$hierarchyWrapper.hide();
+      self.$classPanelWrapper.show();
+      $('ul.tabs li').on('click',function(){
+        $('ul.tabs li').removeClass('active');
+        $(this).addClass('active')
+        $('.optionsele').hide();
+        var activeTab = $(this).find('a').attr('href');
+        $(activeTab).show();
+
+        // Initialize all state of the table.
+        self.$hierarchyWrapper.find('.highlight-hie').removeClass('highlight-hie');
+        self.$classPanelWrapper.find('.highlight').removeClass('highlight');
+        self.$hierarchyWrapper.find('.disable-hie').removeClass('disable-hie');
+
+        self.selectedItem = null;
+        self.selectedHie = null;
+
+        return false;
       });
 
 
@@ -527,8 +837,6 @@
           break;
         case 'polygon':
           break;
-        // case 'rectangle':
-        //   break;
       }
 
     },
@@ -549,7 +857,16 @@
         case 'pen':
           var color = self.hexToRgb(self.selectedItem['color'])
           var top = self.historyStack.peek();
-          var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData, 'prev': top.label, 'color': color, 'mode': self.curMode});
+          var obj = self.selectedHie ? {'object': self.selectedHie['object'], 'id': self.selectedHie['id']} : null;
+          var info = {
+                      'image': self.canvasData,
+                      'mask': self.metaData,
+                      'prev': top.label,
+                      'color': color,
+                      'mode': self.curMode,
+                      'obj': obj,
+                    }
+          var json = JSON.stringify(info);
           self.sendMask(json, curImg, historyFrame);
           break;
         // case 'rectangle':
@@ -633,7 +950,16 @@
               var curImg = canvas.toDataURL();
               var color = self.hexToRgb(self.selectedItem['color'])
               var top = self.historyStack.peek();
-              var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color, 'mode': self.curMode});
+              var obj = self.selectedHie ? {'object': self.selectedHie['object'], 'id': self.selectedHie['id']} : null;;
+              var info = {
+                          'image': self.canvasData,
+                          'mask': self.metaData,
+                          'prev': top.label,
+                          'color': color,
+                          'mode': self.curMode,
+                          'obj': obj,
+                        }
+              var json = JSON.stringify(info);
               self.sendMask(json, curImg, historyFrame);
 
             }
@@ -666,7 +992,16 @@
           if (self.mousePressed){
             var color = self.hexToRgb(self.selectedItem['color'])
             var top = self.historyStack.peek();
-            var json = JSON.stringify({'image': self.canvasData, 'mask': self.metaData,'prev': top.label, 'color': color, 'mode': self.curMode});
+            var obj = self.selectedHie ? {'object': self.selectedHie['object'], 'id': self.selectedHie['id']} : null;
+            var info = {
+                        'image': self.canvasData,
+                        'mask': self.metaData,
+                        'prev': top.label,
+                        'color': color,
+                        'mode': self.curMode,
+                        'obj': obj,
+                      }
+            var json = JSON.stringify(info);
             self.sendMask(json, curImg, historyFrame);
           }
           break;
@@ -713,6 +1048,128 @@
         }else{
           errorContainer.show();
         }
+
+    },
+    addHierarchy: function(item, container, errorContainer, hierarchies){
+      var self = this;
+      var root = container.tree('getTree');
+      var nodes = root['children'];
+      if (!item['name']){
+        errorContainer.text('Please type a name');
+        errorContainer.show();
+        return;
+      }
+
+      for (var i = 0; i < nodes.length; i++){
+        if (nodes[i].name === item['name']){
+          errorContainer.text('Duplicate Hierarchy Name.');
+          errorContainer.show();
+          return;
+        }
+      }
+      errorContainer.hide();
+      var id = self.uniqueId++;
+
+
+      container.tree('appendNode',{
+        name: item['name'],
+        id: id,
+      });
+
+      item['id'] = id;
+      item['node'] = container.tree('getNodeById', id);
+      item['object'] = null;
+      self.hierarchyStack.add(item);
+
+      var option = $('<option value=' + id.toString() +'>'+ item['name'] +'</option>');
+      hierarchies.append(option);
+
+      for (var k = 0; k < nodes.length; k++){
+        var node = nodes[k];
+        for (var i = 0; i < node.children.length; i++){
+          var divId = node.children[i].id;
+          var divColor = node.children[i].color;
+
+          var colorBlock = $('#hie' + divId + '');
+
+          colorBlock.css({
+            'display': 'inline-block',
+            'width': '20px',
+            'height': '20px',
+            'float': 'right',
+            'margin-right': '20px',
+            'background-color': '#' + divColor,
+          });
+        }
+      }
+
+    },
+    addSubNode: function(id, container){
+      var self = this;
+      var node = container.tree('getNodeById', parseInt(id));
+      var root = container.tree('getTree');
+      var nodes = root['children'];
+      console.log(node, id);
+      if (!self.selectedItem){
+        alert('please select an item');
+        return;
+      }
+
+      for (var i = 0; i < node.children.length; i++){
+        if (node.children[i].name === self.selectedItem['name']){
+          alert('Duplicates!');
+          return;
+        }
+      }
+
+      var classname = self.selectedItem['name'];
+      var color = self.selectedItem['color'];
+      var root = container.tree('getTree');
+
+      var uid = self.uniqueId++;
+      var hie = null;
+      for (var i = 0; i < self.hierarchyStack.getSize(); i++){
+        if (self.hierarchyStack.find(i).id == id){
+          hie = self.hierarchyStack.find(i);
+        }
+      }
+      var hieNode = hie['node'];
+
+      container.tree('appendNode', {
+        name: classname,
+        color: color,
+        id: uid,
+      }, node);
+
+      // Add class to hierarchy stack
+      var classnode = container.tree('getNodeById', uid);
+      var classes = hie['classes'];
+      classes[classes.length] = {'name': classname, 'color': color, 'uid': uid, 'node': classnode};
+      container.tree('openNode', node);
+
+      // show gray if the hierarchy to be injected is not currently selected;
+      // var selected = $(hieNode.element).children('div').hasClass('highlight-hie');
+      // console.log(selected);
+      // if (!selected){
+      //   $(classnode.element).children('div').children('span').addClass('.disable-hie');
+      // }
+
+      for (var i = 0; i < node.children.length; i++){
+        var divId = node.children[i].id;
+        var divColor = node.children[i].color;
+
+        var colorBlock = $('#hie' + divId + '');
+
+        colorBlock.css({
+          'display': 'inline-block',
+          'width': '20px',
+          'height': '20px',
+          'float': 'right',
+          'margin-right': '20px',
+          'background-color': '#' + divColor,
+        });
+
+      }
 
     },
     checkValidItem: function(stack, item, errorContainer){
@@ -983,8 +1440,6 @@
       }else{
         labImg.attr('src', label);
       }
-
-
     },
     hexToRgb: function(hex) {
       var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -1005,10 +1460,12 @@
         contentType: "application/json",
         success: function(response){
           var img = $('#label-img');
-
+          var label = 'data:image/png;base64,' + response.objLabel;
           img.attr('src', 'data:image/png;base64,' + response.overlap);
           // Add history item
           self.addHistory(curImg, historyFrame, response);
+
+          self.attachHieLabel(label);
           overlay.css('display', 'none');
 
         },
@@ -1032,6 +1489,29 @@
       }
       return inside;
     },
+    // Highlight current object (hierarchy)
+    highlightObject: function(){
+
+    },
+    attachHieLabel: function(label){
+      var self = this;
+      var stack = self.hierarchyStack;
+      var hie = self.selectedHie;
+
+      if (!hie){
+        alert('unkown error!');
+        return;
+      }
+      var id = hie['id'];
+
+      for (var i = 0; i < stack.getSize(); i++){
+        var match = stack.find(i);
+        if (match['id'] == id){
+          match['object'] = label;
+          break;
+        }
+      }
+    }
 
   }
 

@@ -26,7 +26,10 @@ def handle_action():
     color = metaData['color']
     points = metaData['mask']
     mode = metaData['mode']
+    obj = metaData['obj']
     K = 5
+
+
 
     if len(points) <= K:
         return json.dumps({'success':False, 'message': 'Foreground points are not enough.'}), 400, {'ContentType':'application/json'}
@@ -35,8 +38,12 @@ def handle_action():
     img = raw_to_pil_image(rawData)
 
 
+
     imgArr = np.array(img)
     imgArr = imgArr[:,:,:3]
+
+    obj['object'] = np.zeros(imgArr.shape, dtype=np.uint8) if obj['object'] == None else raw_to_pil_image(obj['object'])
+    obj['object'] = np.array(obj['object'])
 
     colorImg = construct_color_image(imgArr.shape, color)
 
@@ -48,9 +55,16 @@ def handle_action():
         prev = prev[:,:,:3]
 
 
+
+
+    isPart = np.logical_xor(obj['object'], prev)
+    matchPart = np.any(isPart, axis=-1)
+
+
     mask = np.zeros(imgArr.shape[:2], dtype=np.uint8)
     if mode == "GrabCut":
         mask.fill(2)
+        mask[matchPart] = 0
 
     # Sum all channel up
     # temp = np.sum(prev, axis=-1)
@@ -65,8 +79,7 @@ def handle_action():
         y = point['y']
         mask[y, x] = 1
 
-
-
+    originalMask = np.array(mask)
 
     if mode == "GrabCut":
         mask, bgdModel,fgdModel = cv2.grabCut(imgArr, mask, None, bgdModel, fgdModel, K, cv2.GC_INIT_WITH_MASK)
@@ -76,13 +89,17 @@ def handle_action():
     else:
         return json.dumps({'success':False, 'message': 'Invalid mode.'}), 400, {'ContentType':'application/json'}
 
+    # rule out the segments that not connected with annotation
+    outputMask = connectivity(originalMask, outputMask)
 
-    visual, label = construct_label(outputMask, prev, colorImg, imgArr)
+
+    visual, label, objLabel = construct_label(outputMask, prev, obj, colorImg, imgArr)
     labelImg = server_pil_image(label)
     visualImg = server_pil_image(visual)
+    objImg = server_pil_image(objLabel)
 
 
-    return jsonify({'overlap': visualImg, 'label':labelImg})
+    return jsonify({'overlap': visualImg, 'label':labelImg, 'objLabel': objImg})
 
 
 if __name__ == '__main__':
