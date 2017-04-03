@@ -29,15 +29,11 @@ def handle_action():
     obj = metaData['obj']
     K = 5
 
-
-
     if len(points) <= K:
         return json.dumps({'success':False, 'message': 'Foreground points are not enough.'}), 400, {'ContentType':'application/json'}
 
 
     img = raw_to_pil_image(rawData)
-
-
 
     imgArr = np.array(img)
     imgArr = imgArr[:,:,:3]
@@ -54,9 +50,7 @@ def handle_action():
         prev = np.array(prev)
         prev = prev[:,:,:3]
 
-
-
-
+    # Find the part that does not belong to object and set mask to 0
     isPart = np.logical_xor(obj['object'], prev)
     matchPart = np.any(isPart, axis=-1)
 
@@ -100,6 +94,14 @@ def handle_action():
 
 
     return jsonify({'overlap': visualImg, 'label':labelImg, 'objLabel': objImg})
+
+
+@app.route("/highlight_obj", methods=['POST'])
+
+def highlight_obj():
+    metaData = request.get_json()
+    print(metaData)
+    return 'Good!'
 
 
 if __name__ == '__main__':

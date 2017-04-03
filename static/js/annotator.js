@@ -119,22 +119,44 @@
 
   }
 
+  function State(history, hierarchy, selectedHie, selectedItem){
+    this.history = history;
+    this.hierarchy = hierarchy;
+    this.selectedHie = selectedHie;
+    this.selectedItem = selectedItem;
+
+  }
+
 
   /**
      * Function to construct annotator
-     * @param {DOM} wrapperCanvas      [Canvas wrapping div]
+     * @param {DOM} wrapperCanvas         [Canvas wrapping div]
      * @param {string} imgURL             [image URL for rendering to canvas]
      * @param {object} wrapperCanvasCtx   [Canvas Context]
+     * @param {array} images              [File objects]
   */
 
-  function Annotator(wrapperCanvas, imgURL, wrapperCanvasCtx){
+  function Annotator(wrapperCanvas, imgURL, wrapperCanvasCtx, images, overlay){
       this.canvas = wrapperCanvas;
+      // overlay
+      this.overlay = overlay;
       this.picData = imgURL;
+      // current scale
+      this.scale = 1;
+      // raw images
+      this.images = images;
+      // coverted images URL
+      this.imagesURL = null;
       this.canvasData = null;
       this.stackType = null;
       this.ctx = wrapperCanvasCtx;
+      // current image id
+      this.curImgID = 0;
+      // Array with State object.
+      this.states = null;
       // recording stacks
       this.classStack = null;
+      //{'image': canvasData, 'tool': string, 'label': labelData, 'overlap': visualization, 'hie': hierarchy}
       this.historyStack = null;
       this.uniqueId = null;
       this.selectedHie = null;
@@ -142,16 +164,20 @@
       this.hierarchyStack = null;
       // ready to send polygon mask or not
       this.sendPoly = null;
+      // current zoom factor
+      this.curZoomFactor = 1;
       // jQuery element for globally using
       this.$classPanelWrapper = null;
       this.$hisPanelWrapper = null;
       this.$toolKitWrapper = null;
       this.$hierarchyWrapper = null;
       this.$optionsWrapper = null;
-      this.$toolKit = null;
-      this.$hisPanel = null;
-      this.$classPanel = null;
       this.$labelWrapper = null;
+      this.$editorWrapper = null;
+      this.$selectHieFrame = null;
+      this.$hieOptions = null;
+      self.$historyFrame = null;
+      self.$galleryMain = null;
       // {'name': , 'color': }
       this.selectedItem = null;
       // current tool
@@ -185,6 +211,7 @@
       self.polyStarted = false;
       self.point = new Point(0, 0);
       self.polygonPoints = new Array();
+      self.states = new Array();
       self.sendPoly = false;
       self.uniqueId = 0;
       self.lineWidth = 0;
@@ -196,20 +223,20 @@
       self.historyStack = new infoStack(self.stackType['history'], 20);
       self.hierarchyStack = new infoStack(self.stackType['class'], 50);
 
-      self.historyStack.add({'image': self.canvasData, 'tool': null, 'label': '', 'overlap': ''});
+      self.historyStack.add({'image': self.canvasData, 'tool': null, 'label': '', 'overlap': '', 'hie': null});
 
       //radius of click around the first point to close the draw of polygon
       self.POLY_END_CLICK_RADIUS = 10;
       //the max number of points of your polygon
       self.POLY_MAX_POINTS = 8;
 
-
       self.$optionsWrapper = $('<div class="optionswrapper panelwrapper "></div>');
       self.$classPanelWrapper = $('<div id="class-tab" class="optionsele panelwrapper"></div>');
       self.$hisPanelWrapper = $('<div class="panelwrapper"></div>');
       self.$toolKitWrapper = $('<div class="toolwrapper"></div>');
-      self.$labelWrapper = $('<div class="labelwrapper"></div>');
+      self.$labelWrapper = $('<div id="label-tab" class="labelwrapper mainoptionele"></div>');
       self.$hierarchyWrapper = $('<div id="hierarchy-tab" class="optionsele hierarchywrapper"></div>');
+      self.$editorWrapper = $('<div id="editor" class="editor-field"></div>');
 
       var canvasX = self.canvas.offset().left;
       var canvasY = self.canvas.offset().top;
@@ -218,8 +245,11 @@
 
       var canvasW = self.canvas.attr('width');
       var canvasH = self.canvas.attr('height');
-      self.thumbWidth = parseInt(self.canvas.attr('width'))/12;
-      self.thumbHeight = parseInt(self.canvas.attr('height'))/12;
+      // self.thumbWidth = parseInt(self.canvas.attr('width'))/12;
+      // self.thumbHeight = parseInt(self.canvas.attr('height'))/12;
+
+      self.thumbWidth = 40;
+      self.thumbHeight = 40;
 
 
 
@@ -233,14 +263,12 @@
 
 
 
-
-
       /* sub-elements for class panel */
       var titleClass = $('<p class="module-title">Class Panel</p>')
       var nameTextBox = $('<input id="classname" type="text" style="font-size: 20px" name="customclass" placeholder="enter a class name">');
       var addBtn = $('<button id="add" class="decisionBtn">add</button>');
       var errorMsg = $('<p id="errorMsg" class="error" style="display: none"></p>')
-      var clearBtn = $('<button id="clear" class="decisionBtn">clear</button>');
+      var clearClassBtn = $('<button id="clear" class="decisionBtn">clear</button>');
       var colorSelector = $('#colorSelector');
       var hiddenInput = $('#color_value');
       var selectFrame = $('<table id="selectFrame" class="table table-hover panel-frame"></table>');
@@ -249,6 +277,9 @@
       var deleteBtn = $('<button id="delete" class="decisionBtn">delete</button>');
       var deleteAllBtn = $('<button id="deleteall" class="decisionBtn">delete all</button>');
       var connectWrapper = $('<div></div>');
+
+      // for being able to globally accessed by functions
+      self.$hieOptions = hieOptions;
 
       connectWrapper.append(addToHieBtn);
       connectWrapper.append(hieOptions);
@@ -264,7 +295,7 @@
       self.$classPanelWrapper.append(colorSelector);
       self.$classPanelWrapper.append(hiddenInput);
       self.$classPanelWrapper.append(addBtn);
-      self.$classPanelWrapper.append(clearBtn);
+      self.$classPanelWrapper.append(clearClassBtn);
       self.$classPanelWrapper.append(selectFrame);
       self.$classPanelWrapper.append(connectWrapper);
       self.$classPanelWrapper.append(deleteBtn);
@@ -274,15 +305,18 @@
       var titleHis = $('<p class="module-title">History Panel</p>')
       var undoBtn = $('<button id="undoHis" class="op-his">undo</button>');
       var redoBtn = $('<button id="redoHis" class="op-his">redo</button>');
-      var clearBtn = $('<button id="clearHis" class="op-his">clear</button>');
+      var clearHisBtn = $('<button id="clearHis" class="op-his">clear</button>');
       var historyFrame = $('<table id="historyFrame" class="table table-hover panel-frame"></table>');
       historyFrame.append($('<thead><tr><th>Action</th><th>Thumbnail</th></tr></thead><tbody id="panelBody"></tbody>'))
+
+      // For being able to globally accessed by functions.
+      self.$historyFrame = historyFrame;
 
       self.$hisPanelWrapper.append(titleHis);
       self.$hisPanelWrapper.append(undoBtn);
       self.$hisPanelWrapper.append(redoBtn);
       self.$hisPanelWrapper.append(historyFrame);
-      self.$hisPanelWrapper.append(clearBtn);
+      self.$hisPanelWrapper.append(clearHisBtn);
 
 
       /* sub-elements for tool kit*/
@@ -334,7 +368,7 @@
 
       /* sub-elements for hierarchy */
       var titleHie = $('<p class="module-title">Hierarchy Panel</p>')
-      var hieNameTextBox = $('<input id="hiename" type="text" style="font-size: 20px" name="customhie" placeholder="enter a hierarchy name">');
+      var hieNameTextBox = $('<input id="hiename" type="text" style="font-size: 20px" name="customhie" placeholder="enter a object name">');
       // TODO: change the variables name
       var addHieBtn = $('<button id="addHie" class="decisionBtn add-hie">add</button>');
       var errorHieMsg = $('<p id="errorMsg" class="error" style="display: none"></p>')
@@ -342,6 +376,9 @@
       var selectHieFrame = $('<div id="selectHieFrame" class="hierarchy-div"></div>');
       var deleteHieBtn = $('<button id="deleteHie" class="decisionBtn">delete</button>');
       var deleteAllHieBtn = $('<button id="deleteAllHie" class="decisionBtn">delete all</button>')
+
+      // for being able to globally accessed by functions
+      self.$selectHieFrame = selectHieFrame;
 
 
 
@@ -442,7 +479,7 @@
             }
             self.selectedItem = null;
             self.selectedHie = item;
-            self.highlightObject();
+            //self.highlightObject();
           }else{
             self.selectedHie = null;
             self.selectedItem = null;
@@ -546,18 +583,9 @@
         e.preventDefault();
         self.selectedItem = null;
         self.selectedHie = null;
+
         self.hierarchyStack = new infoStack(self.stackType['class'], 50);
-        var tree = selectHieFrame.tree('getTree');
-        var children = tree['children'];
-
-        // Remove all nodes in hierarchy
-        while (children.length != 0){
-          selectHieFrame.tree('removeNode', children[children.length-1]);
-        }
-
-        // Remove options in select tag
-        hieOptions.find('option').remove();
-
+        self.removeAllHies();
       });
 
 
@@ -594,7 +622,7 @@
         nameTextBox.val('');
       });
 
-      clearBtn.on('click', function(e){
+      clearClassBtn.on('click', function(e){
         e.preventDefault();
         errorMsg.hide();
         colorSelector.css('background-color', '#' + defaultColor.toString());
@@ -639,12 +667,9 @@
         }else{
           self.selectedItem = null;
         }
-
-
       });
 
       /* actions for toolkit and canvas*/
-
       $(document).on('click', '.toolkit-item', function(e){
         var selected = $(this).hasClass('highlight');
         $('.toolkit-item').removeClass('highlight');
@@ -672,6 +697,7 @@
         },
         mouseup: function(e){
           self.handleMouseup(e, this, historyFrame);
+
         },
         mouseleave: function(e){
           self.handleMouseleave(e, this, historyFrame);
@@ -687,17 +713,14 @@
 
 
       /* history panel actions */
-
       undoBtn.on('click', function(e){
         self.undoOnce(historyFrame);
       });
       redoBtn.on('click', function(e){
         self.redoOnce(historyFrame);
       });
-      clearBtn.on('click', function(e){
-        historyFrame.find('tr').each(function(index){
-          $(this).remove();
-        });
+      clearHisBtn.on('click', function(e){
+        self.removeAllHis();
         self.historyStack = new infoStack(self.stackType['history'], 20);
         self.historyStack.add({'image': self.canvasData, 'tool': null, 'label': '', 'overlap': ''});
         self.renderURL(self.canvasData, null);
@@ -713,8 +736,18 @@
       // Style of wrappers
       self.$optionsWrapper.css({
         'width': panelWidth,
-        'height': '750px',
-      })
+        'height': '800px',
+      });
+
+      self.$editorWrapper.css({
+        'display': 'inline-block',
+        'margin': '0 auto',
+        'position': 'relative',
+        'width': '65%',
+        'height': '800px',
+
+
+      });
 
       self.$classPanelWrapper.css({
         'width': '100%',
@@ -728,7 +761,7 @@
 
       self.$hisPanelWrapper.css({
         'width': panelWidth,
-        'height': '700px',
+        'height': '800px',
       });
 
       self.$toolKitWrapper.css({
@@ -744,17 +777,93 @@
         'display': 'block',
         'background-color': 'black',
         'margin': '0 auto',
+        'border-radius':20,
         'height': canvWrapper.height(),
         'overflow': 'auto',
-        'width': '65%',
+        'width': '100%',
+      });
+
+
+      /* images gallery */
+      var galleryWrapper = $('<div id="gallery" class="gallery-wrapper"></div>');
+      var galleryMain = $('<div id="gallery-main" class="gallery-content"></div>');
+      var leftDiv = $('<div id="left-arrow" class="scroll-left gallery-arrows"><i class="scroll-left-icon fa fa-angle-double-left"></i></div>');
+      var rightDiv = $('<div id="right-arrow" class="scroll-right gallery-arrows"><i class="scroll-right-icon fa fa-angle-double-right"></i></div>');
+
+      // For being able to globally accessible by functions
+      self.$galleryMain = galleryMain;
+
+      galleryWrapper.append(leftDiv);
+      galleryWrapper.append(galleryMain);
+      galleryWrapper.append(rightDiv);
+
+      // Loading all images to gallery
+      self.loadingGallery(galleryMain);
+
+      $(document).on('click', '.image-item',function(e){
+        if (confirm('Do you really what to switch image?')){
+          if (self.storeState($(this))){
+              self.restoreState($(this));
+          }
+        }
+      });
+
+      leftDiv.on('click', function(){
+        self.$galleryMain.animate({
+          scrollLeft: '-=200px',
+        })
+      });
+
+      rightDiv.on('click', function(){
+        self.$galleryMain.animate({
+          scrollLeft: '+=200px',
+        })
       });
 
 
 
+
+      /* Tabs for canvas and results*/
+      var mainTabsWrapper = $('<div id="mainTabs" class="tabsWrapper"></div>');
+      var canvasOption = $('<li class="mainli" ><a href="#wrapperDiv" >Canvas</a></li>');
+      var labelOption = $('<li class="mainli" ><a href="#label-tab" >Label</a></li>');
+      var mainBar = $('<ul class="tabs"></ul>');
+      var mainSeparator = $('<hr/>');
+
+      /* Zoom in button and Zoom out button */
+      var ZoomIn = $('<button id="zoomin" class="zoom">Zoom In</button>');
+      var ZoomOut = $('<button id="zoomout" class="zoom">Zoom Out</button>');
+
+
+      mainBar.append(canvasOption);
+      mainBar.append(labelOption);
+      mainTabsWrapper.append(ZoomIn);
+      mainTabsWrapper.append(mainBar);
+      mainTabsWrapper.append(ZoomOut);
+
+
+      ZoomIn.on('click', function(e){
+
+      });
+
+
+      ZoomOut.on('click', function(e){
+
+      });
+
+
+
+      self.$editorWrapper.append(mainTabsWrapper);
+      self.$editorWrapper.append(separator);
+      self.$editorWrapper.append(canvWrapper);
+      self.$editorWrapper.append(self.$labelWrapper);
+      self.$editorWrapper.append(galleryWrapper);
+
+
       /* Tabs for options */
-      var tabsWrapper = $('<div class="tabsWrapper"></div>');
+      var tabsWrapper = $('<div id="panelTabs" class="tabsWrapper"></div>');
       var classPanelOption = $('<li><a href="#class-tab">Class</a></li>');
-      var hierarchyPanelOption = $('<li><a href="#hierarchy-tab">Hierarchy</a></li>');
+      var hierarchyPanelOption = $('<li><a href="#hierarchy-tab">Object</a></li>');
       var tabsBar = $('<ul class="tabs"></ul>');
       var separator = $('<hr/>');
 
@@ -768,20 +877,22 @@
       self.$optionsWrapper.append(separator);
       self.$optionsWrapper.append(self.$classPanelWrapper);
       self.$optionsWrapper.append(self.$hierarchyWrapper);
+      // append to section
+      $('#content').append(self.$editorWrapper);
 
+      self.$toolKitWrapper.insertBefore(self.$editorWrapper);
+      self.$optionsWrapper.insertBefore(self.$editorWrapper);
+      // self.$labelWrapper.insertAfter(canvWrapper);
+      // $('<hr/>').insertAfter(canvWrapper);
+      self.$hisPanelWrapper.insertAfter(self.$editorWrapper);
 
-      self.$toolKitWrapper.insertBefore(canvWrapper);
-      self.$optionsWrapper.insertBefore(canvWrapper);
-      self.$labelWrapper.insertAfter(canvWrapper);
-      $('<hr/>').insertAfter(canvWrapper);
-      self.$hisPanelWrapper.insertAfter(canvWrapper);
 
 
 
       panelWidth = self.$optionsWrapper.width();
       // offset is calculated by the width of main div substract the width of canvas and two panels,
       // then divided by 2. This is distance between canvas and panels. 20 bias term for move inside a little bit.
-      var offset = (mainWidth - canvWrapper.width() - 2 * panelWidth) / 2 - 20;
+      var offset = (mainWidth - self.$editorWrapper.width() - 2 * panelWidth) / 2 - 20;
 
       self.$optionsWrapper.css('right', offset);
       self.$hisPanelWrapper.css('left', offset);
@@ -789,40 +900,303 @@
       $(window).resize(function() {
         var mainWidth = main.width();
         var panelWidth = self.$optionsWrapper.width();
-        var offset = (mainWidth - canvWrapper.width() - 2 * panelWidth) / 2 - 20;
+        var offset = (mainWidth - self.$editorWrapper.width() - 2 * panelWidth) / 2 - 20;
         self.$optionsWrapper.css('right', offset);
         self.$hisPanelWrapper.css('left', offset);
       });
 
 
       // Switch between tabs
-      $('ul.tabs li:first').addClass('active');
+      $('#panelTabs ul.tabs li:first').addClass('active');
       self.$hierarchyWrapper.hide();
       self.$classPanelWrapper.show();
-      $('ul.tabs li').on('click',function(){
-        $('ul.tabs li').removeClass('active');
+      $('#panelTabs ul.tabs li').on('click',function(){
+        $('#panelTabs ul.tabs li').removeClass('active');
         $(this).addClass('active')
         $('.optionsele').hide();
         var activeTab = $(this).find('a').attr('href');
         $(activeTab).show();
 
         // Initialize all state of the table.
-        self.$hierarchyWrapper.find('.highlight-hie').removeClass('highlight-hie');
-        self.$classPanelWrapper.find('.highlight').removeClass('highlight');
-        self.$hierarchyWrapper.find('.disable-hie').removeClass('disable-hie');
+        self.initializeOptionPanel();
+        return false;
+      });
 
-        self.selectedItem = null;
-        self.selectedHie = null;
+
+      // Switch between canvas and result
+      $('#mainTabs ul.tabs li:first').addClass('active');
+      self.$labelWrapper.hide();
+      canvWrapper.show();
+
+      $('#mainTabs ul.tabs li').on('click',function(){
+        $('#mainTabs ul.tabs li').removeClass('active');
+        $(this).addClass('active')
+        $('.mainoptionele').hide();
+        var activeTab = $(this).find('a').attr('href');
+        $(activeTab).show();
+
+        if(activeTab === '#label-tab'){
+          galleryWrapper.hide();
+        }else{
+          galleryWrapper.show();
+        }
 
         return false;
       });
 
+    },
+    removeAllHis: function(){
+      var self = this;
+      self.$historyFrame.find('tr').each(function(index){
+        if (index != 0){
+          $(this).remove();
+        }
+      });
+    },
+    removeAllHies: function(){
+      var self = this;
+      var tree = self.$selectHieFrame.tree('getTree');
+      var children = tree['children'];
+
+      // Remove all nodes in hierarchy
+      while (children.length != 0){
+        self.$selectHieFrame.tree('removeNode', children[children.length-1]);
+      }
+
+      // Remove options in select tag
+      self.$hieOptions.find('option').remove();
+    },
+
+    initializeOptionPanel: function(){
+      var self = this;
+      self.$hierarchyWrapper.find('.highlight-hie').removeClass('highlight-hie');
+      self.$classPanelWrapper.find('.highlight').removeClass('highlight');
+      self.$hierarchyWrapper.find('.disable-hie').removeClass('disable-hie');
+      self.$hierarchyWrapper.find('.highlight-class').removeClass('highlight-class');
+
+      self.selectedItem = null;
+      self.selectedHie = null;
+    },
+    addHisFromState: function(history){
+      var self = this;
+      self.historyStack = $.extend(true, new infoStack(self.stackType['history'], 20), history);
+      for (var i = 1; i < history.getSize(); i++){
+        var his = history.find(i);
+
+        var hisCell = $('<tr class="hisCell" id=' + i.toString() + '><td>'
+        + his['tool'] + '</td><td><img src="'
+        + his['image'] +'" style="width:' + self.thumbWidth + 'px;height:' + self.thumbHeight +'px;"></img></td></tr>');
+
+        self.$historyFrame.prepend(hisCell);
+      }
+      // Restore polygon Points.
+      var top = self.historyStack.peek();
+      self.polygonPoints = $.extend(true, [], top['ploy']);
+
+      var label = top['overlap'];
+      var canvas = top['image'];
+
+      self.renderURL(canvas, label);
+
+    },
+
+    addHiesFromState: function(hierarchy, state){
+      var self = this;
+      // var root = self.$selectHieFrame.tree('getTree');
+      var container = self.$selectHieFrame;
+      var hierarchies = self.$hieOptions;
+      var selectHieID = -1;
+      var selectClassID = -1;
+
+      self.hierarchyStack = $.extend(true, new infoStack(self.stackType['class'], 50), hierarchy);
+      for (var i = 0; i < hierarchy.getSize(); i++){
+        var item = hierarchy.find(i);
+        //{'name': string, 'color': string, 'uid', int, 'node': classnode}
+        var childNodes = item['classes'];
+
+
+        container.tree('appendNode',{
+          name: item['name'],
+          id: item['id'],
+        });
+
+        var option = $('<option value=' + item['id'].toString() +'>'+ item['name'] +'</option>');
+        hierarchies.append(option);
+
+        var parentNode = container.tree('getNodeById', item['id']);
+
+
+        for (var k = 0; k < childNodes.length; k++){
+          var child = childNodes[k];
+
+
+          container.tree('appendNode', {
+            name: child['name'],
+            color: child['color'],
+            id: child['uid'],
+          }, parentNode);
+
+          var childNode = container.tree('getNodeById', child['uid']);
+
+
+          if (state.selectedHie && state.selectedHie['id'] == item['id'] && state.selectedItem && state.selectedItem['name'] === child['name']){
+            selectClassID = child['uid'];
+            self.selectedItem = state.selectedItem;
+          }
+
+          container.tree('openNode', parentNode);
+
+
+          var root = container.tree('getTree');
+          var nodes = root['children'];
+          for (var kk = 0; kk < nodes.length; kk++){
+            var node = nodes[kk];
+            for (var ii = 0; ii < node.children.length; ii++){
+              var divId = node.children[ii].id;
+              var divColor = node.children[ii].color;
+
+              var colorBlock = $('#hie' + divId + '');
+
+              colorBlock.css({
+                'display': 'inline-block',
+                'width': '20px',
+                'height': '20px',
+                'float': 'right',
+                'margin-right': '20px',
+                'background-color': '#' + divColor,
+              });
+            }
+          }
+
+        }
+        if (state.selectedHie && state.selectedHie['id'] == item['id']){
+          selectHieID = item['id'];
+          self.selectedHie = state.selectedHie;
+        }else if (state.selectedHie && state.selectedHie['id'] != item['id']){
+          var disChildren = parentNode.children;
+          for (var j = 0; j < disChildren.length; j++){
+            var disChild = disChildren[j];
+            $(disChild.element).children('div').children('span').addClass('disable-hie');
+          }
+        }
+      }
+
+      var root = container.tree('getTree');
+      var nodes = root['children'];
+      console.log(selectHieID, selectClassID);
+      for (var i = 0; i < nodes.length; i++){
+        var node = nodes[i];
+        if (node.id == selectHieID){
+          if (!$(node.element).children('div').hasClass('highlight-hie')){
+            $(node.element).children('div').addClass('highlight-hie');
+          }
+          for (var j = 0; j < node.children.length; j++){
+            if (node.children[j].id == selectClassID){
+              if (!$(node.children[j].element).children('div').hasClass('highlight-class')){
+                $(node.children[j].element).children('div').addClass('highlight-class');
+              }
+            }
+          }
+        }
+      }
+
+
+    },
+    storeState: function(figure){
+      var self = this;
+      var cid = self.curImgID;
+
+      var sid = figure.find('img').attr('id');
+      var nid = parseInt(sid.substring(sid.indexOf('-')+1, sid.length));
+
+      if (cid == nid){
+        return false;
+      }
+
+      var states = self.states;
+      // Deep copy
+      var history = $.extend(true, {}, self.historyStack);
+      var hierarchy = $.extend(true, {}, self.hierarchyStack);
+
+      var state = new State(history, hierarchy, self.selectedHie, self.selectedItem);
+      states[cid] = state;
+      return true;
+
+    },
+    restoreState: function(figure){
+      var self = this;
+      var sid = figure.find('img').attr('id');
+      var nid = parseInt(sid.substring(sid.indexOf('-')+1, sid.length));
+      var states = self.states;
+      var state = states[nid];
+
+
+      if (state){
+        self.initializeOptionPanel();
+        var history = state.history;
+        var hierarchy = state.hierarchy;
+
+        self.removeAllHies();
+        self.addHiesFromState(hierarchy, state);
+        self.removeAllHis();
+        self.addHisFromState(history);
+
+      }else{
+        /* Initialize all state */
+        var imgURL = figure.find('img').attr('src');
+        // Initialize history state
+        self.removeAllHis();
+        self.historyStack = new infoStack(self.stackType['history'], 20);
+
+        self.historyStack.add({'image': imgURL, 'tool': null, 'label': '', 'overlap': '', 'hie': null});
+        self.polygonPoints = new Array();
+
+        // Initialize object state
+        for (var i = 0; i < self.hierarchyStack.length; i++){
+          var item = self.hierarchyStack.find(i);
+          item['object'] = null;
+        }
+
+        // render new image on canvas
+
+        self.renderURL(imgURL, null);
+      }
+      self.curImgID = nid;
+
+    },
+    loadingGallery: function(gallery){
+      var self = this;
+
+      var files = self.images;
+
+
+      for (var i = 0; i < files.length; i++){
+        var rawName = files[i].name;
+        var block = $('<figure class="image-item"></figure>');
+        var thumb = $('<img id="image-' + i.toString() + '" class="image-block" src="static/img/loading.gif"></img>');
+        var name = $('<figcaption class="image-name">' + rawName.substr(0, rawName.lastIndexOf('.')) + '</figcaption>');
+
+        block.append(thumb);
+        block.append(name);
+        gallery.append(block);
+
+        // immediately-invoked function expression (help asynchronization getting index of filereader)
+        (function(file, idx){
+          var reader = new FileReader();
+
+          $(reader).load(function(e){
+            $('#image-' + idx.toString()).attr('src', e.target.result);
+          })
+          reader.readAsDataURL(file);
+        })(files[i], i);
+
+      }
 
     },
     handleMousemove: function(e, canvas){
       e.preventDefault();
       var self = this;
-      if (!self.curTool || !self.selectedItem){
+      if (!self.curTool || !self.selectedItem || !self.selectedHie){
         return;
       }
       // event coordinate
@@ -844,7 +1218,7 @@
       e.preventDefault();
       var self = this;
       // check if the tool and class is selected
-      if (!self.curTool || !self.selectedItem){
+      if (!self.curTool || !self.selectedItem || !self.selectedHie){
         return;
       }
 
@@ -853,13 +1227,15 @@
       // event coordinate
       var x_off = e.pageX - $(canvas).offset().left;
       var y_off = e.pageY - $(canvas).offset().top;
+
       switch (self.curTool) {
         case 'pen':
           var color = self.hexToRgb(self.selectedItem['color'])
           var top = self.historyStack.peek();
+          var ori = self.historyStack.find(0);
           var obj = self.selectedHie ? {'object': self.selectedHie['object'], 'id': self.selectedHie['id']} : null;
           var info = {
-                      'image': self.canvasData,
+                      'image': ori.image,
                       'mask': self.metaData,
                       'prev': top.label,
                       'color': color,
@@ -867,6 +1243,7 @@
                       'obj': obj,
                     }
           var json = JSON.stringify(info);
+
           self.sendMask(json, curImg, historyFrame);
           break;
         // case 'rectangle':
@@ -887,7 +1264,7 @@
     handleMousedown: function(e, canvas, historyFrame){
       var self = this;
       e.preventDefault();
-      if (!self.curTool || !self.selectedItem){
+      if (!self.curTool || !self.selectedItem || !self.selectedHie){
         return;
       }
       // event coordinate
@@ -947,12 +1324,14 @@
               }
 
               // Send request
+              self.drawPolygon();
               var curImg = canvas.toDataURL();
               var color = self.hexToRgb(self.selectedItem['color'])
               var top = self.historyStack.peek();
+              var ori = self.historyStack.find(0);
               var obj = self.selectedHie ? {'object': self.selectedHie['object'], 'id': self.selectedHie['id']} : null;;
               var info = {
-                          'image': self.canvasData,
+                          'image': ori.image,
                           'mask': self.metaData,
                           'prev': top.label,
                           'color': color,
@@ -961,9 +1340,9 @@
                         }
               var json = JSON.stringify(info);
               self.sendMask(json, curImg, historyFrame);
-
+            }else{
+              self.drawPolygon();
             }
-            self.drawPolygon();
           }else{
             alert('Please select a class name!');
             return;
@@ -978,7 +1357,7 @@
     handleMouseleave: function(e, canvas, historyFrame){
       e.preventDefault();
       var self = this;
-      if (!self.curTool || !self.selectedItem){
+      if (!self.curTool || !self.selectedItem || !self.selectedHie){
         return;
       }
       // event coordinate
@@ -992,9 +1371,10 @@
           if (self.mousePressed){
             var color = self.hexToRgb(self.selectedItem['color'])
             var top = self.historyStack.peek();
+            var ori = self.historyStack.find(0);
             var obj = self.selectedHie ? {'object': self.selectedHie['object'], 'id': self.selectedHie['id']} : null;
             var info = {
-                        'image': self.canvasData,
+                        'image': ori.image,
                         'mask': self.metaData,
                         'prev': top.label,
                         'color': color,
@@ -1102,14 +1482,14 @@
           });
         }
       }
-
     },
+
     addSubNode: function(id, container){
       var self = this;
       var node = container.tree('getNodeById', parseInt(id));
       var root = container.tree('getTree');
       var nodes = root['children'];
-      console.log(node, id);
+
       if (!self.selectedItem){
         alert('please select an item');
         return;
@@ -1236,7 +1616,7 @@
         var c = (self.point.x - x) * self.point.y + (y - self.point.y) * self.point.x;
 
         var length = self.metaData.length;
-        console.log(self.point.x, self.point.y, "--",round_x,round_y)
+        // console.log(self.point.x, self.point.y, "--",round_x,round_y)
         // fit the line on X-axis
         for (var fix_x = Math.round(Math.min(self.point.x, x)) + 1; fix_x < Math.round(Math.max(self.point.x, x)); fix_x++){
           var cal_y = Math.round((- (c + a * fix_x) / b));
@@ -1271,7 +1651,7 @@
         self.point.x = x;
         self.point.y = y;
         if (round_x != self.metaData[length-1].x || round_y != self.metaData[length-1].y){
-          console.log(round_x-correction,round_x-correction + self.lineWidth)
+          // console.log(round_x-correction,round_x-correction + self.lineWidth)
           for (var start_x = round_x-correction; start_x < round_x-correction + self.lineWidth; start_x++){
             for (var start_y = round_y-correction; start_y < round_y-correction + self.lineWidth; start_y++){
               self.metaData.push(new Point(start_x, start_y));
@@ -1359,7 +1739,9 @@
 
       var item = {'image': img, 'tool': self.curTool, 'label': 'data:image/png;base64,' + res.label, 'overlap': 'data:image/png;base64,' + res.overlap};
 
-
+      // Add hierarchy info into stack. (deep copy)
+      item['hie'] = $.extend(true, {}, self.selectedHie);
+      item['poly'] = $.extend(true, [], self.polygonPoints);
       var state = stack.add(item);
       var id = stack.curIdx-1;
 
@@ -1378,6 +1760,7 @@
     undoOnce: function(history){
       var self = this;
       var stack = self.historyStack;
+
       if (stack.curIdx == 1){
         return;
       }
@@ -1387,12 +1770,20 @@
 
       tr.remove();
 
-      /* restore to canvas */
+
       var prev = stack.peek();
 
       var url = prev['image'];
       var label = prev['overlap'];
+      var hie = prev['hie'];
+      var poly = prev['poly'];
 
+      //console.log(poly.length, stack.getSize());
+
+      self.polygonPoints = $.extend(true, [], poly);
+
+      self.updateObject(hie);
+      /* restore to canvas */
       self.renderURL(url, label);
     },
 
@@ -1401,11 +1792,16 @@
       var stack = self.historyStack;
 
       if (stack.find(stack.size)){
-              console.log(stack.size);
         var item = stack.find(stack.size);
         stack.add(item);
         var url = item['image'];
         var label = item['overlap'];
+        var hie = item['hie'];
+        var poly = item['poly'];
+
+        self.polygonPoints = $.extend(true, [], poly);
+
+        self.updateObject(hie);
         self.renderURL(url, label);
 
         var hisCell = $('<tr class="hisCell" id=' + stack.size + '><td>'
@@ -1414,6 +1810,28 @@
 
         history.prepend(hisCell);
 
+      }
+    },
+
+    updateObject: function(prev){
+      var self = this;
+      var hStack = self.hierarchyStack;
+
+      for (var i = 0; i < hStack.getSize(); i++){
+        var cur = hStack.find(i);
+        // no more element to be undone.
+        if (prev == null){
+          cur['object'] = null;
+          continue;
+        }
+        if (cur['id'] == prev['id']){
+          cur['object'] = prev['object'];
+          // Update the object label of selected hierarchy.
+          if (prev['id'] == self.selectedHie['id']){
+            self.selectedHie['object'] = prev['object'];
+          }
+          break;
+        }
       }
     },
 
@@ -1428,8 +1846,15 @@
     renderURL: function(url, label){
       var self = this;
       var img = new Image();
+      var canvas = self.canvas[0];
+
       $(img).load(function(){
+        canvas.width = img.width;
+        canvas.height = img.height;
+        self.overlay.css('width', img.width);
+        self.overlay.css('height', img.height);
         self.ctx.drawImage(img, 0, 0);
+        console.log(img.width, img.height);
       });
       img.src = url;
 
@@ -1462,19 +1887,30 @@
           var img = $('#label-img');
           var label = 'data:image/png;base64,' + response.objLabel;
           img.attr('src', 'data:image/png;base64,' + response.overlap);
-          // Add history item
-          self.addHistory(curImg, historyFrame, response);
 
           self.attachHieLabel(label);
+          // Add history item
+          self.addHistory(curImg, historyFrame, response);
           overlay.css('display', 'none');
 
         },
         error: function(xhr){
           var text = JSON.parse(xhr.responseText);
           alert(text['message']);
+          // Restore states
+          var top = self.historyStack.peek();
+          var canvas = top['image'];
+          var label = top['overlap'];
+          var poly = top['poly'];
+          self.polygonPoints = $.extend(true, [], poly);
+
           overlay.css('display', 'none');
+          self.renderURL(canvas, label);
+
         }
+
       });
+
     },
     // For checking if a point is inside the polygon
     insidePoly: function(point, poly){
@@ -1490,33 +1926,57 @@
       return inside;
     },
     // Highlight current object (hierarchy)
+    // TODO: Not sure how to display for now
     highlightObject: function(){
+      var self = this;
+      if (!self.selectedHie){
+        return;
+      }
+
+      var info = {
+                  'id': self.selectedHie['id'],
+                  'label': self.selectedHie['object'],
+                 };
+      var json = JSON.stringify(info);
+
+      $.ajax({
+        url: '/highlight_obj',
+        data: json,
+        type: 'POST',
+        contentType: "application/json",
+        success: function(response){
+
+        },
+        error: function(xhr){
+          var text = JSON.parse(xhr.responseText);
+          alert(text['message']);
+        }
+      });
 
     },
     attachHieLabel: function(label){
       var self = this;
       var stack = self.hierarchyStack;
-      var hie = self.selectedHie;
 
-      if (!hie){
+      if (!self.selectedHie){
         alert('unkown error!');
         return;
       }
-      var id = hie['id'];
+      var id = self.selectedHie['id'];
 
       for (var i = 0; i < stack.getSize(); i++){
         var match = stack.find(i);
         if (match['id'] == id){
           match['object'] = label;
+          self.selectedHie['object'] = label;
           break;
         }
       }
     }
-
   }
 
-  $.fn.annotator = function(wrapperCanvas, imgURL, wrapperCanvasCtx){
-    var annotator = new Annotator(wrapperCanvas, imgURL, wrapperCanvasCtx);
+  $.fn.annotator = function(wrapperCanvas, imgURL, wrapperCanvasCtx, images, overlay){
+    var annotator = new Annotator(wrapperCanvas, imgURL, wrapperCanvasCtx, images, overlay);
   }
 
 })(jQuery);
