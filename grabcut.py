@@ -1,15 +1,20 @@
 import os
-from flask import Flask, render_template, request, json, send_file, jsonify
+from flask import Flask, make_response, render_template, request, json, send_file, jsonify
 import numpy as np
 import cv2
 from PIL import Image
-import io
+from io import *
 import re
 import base64
 from api import *
+import time
+import xml.etree.cElementTree as ET
 
 
 app = Flask(__name__)
+
+
+
 
 @app.route("/")
 def home():
@@ -20,88 +25,124 @@ def home():
 @app.route("/handle_action", methods=['POST'])
 def handle_action():
     metaData = request.get_json()
-    print(metaData.keys())
     rawData = metaData['image']
-    rawPrev = metaData['prev']
+    prevDict = metaData['prev']
     color = metaData['color']
     points = metaData['mask']
     mode = metaData['mode']
     obj = metaData['obj']
+    clsname = metaData['cls']
+    tool = metaData['tool']
+    bbox = metaData['bbox']
+
     K = 5
 
-    if len(points) <= K:
+    sx, sy, ex, ey = bbox['start_x'], bbox['start_y'], bbox['end_x'], bbox['end_y']
+    h, w = ey - sy, ex - sx
+    pos = prevDict['pos']
+    edge = prevDict['edge']
+
+
+    if (len(points) <= K and mode == 'GrabCut') or obj == None:
         return json.dumps({'success':False, 'message': 'Foreground points are not enough.'}), 400, {'ContentType':'application/json'}
 
-
+    # Decode original image to numpy array
     img = raw_to_pil_image(rawData)
-
     imgArr = np.array(img)
     imgArr = imgArr[:,:,:3]
-
-    obj['object'] = np.zeros(imgArr.shape, dtype=np.uint8) if obj['object'] == None else raw_to_pil_image(obj['object'])
-    obj['object'] = np.array(obj['object'])
-
-    colorImg = construct_color_image(imgArr.shape, color)
-
-    if rawPrev == '':
-        prev = np.zeros(imgArr.shape, dtype=np.uint8)
-    else:
-        prev = raw_to_pil_image(rawPrev)
-        prev = np.array(prev)
-        prev = prev[:,:,:3]
-
-    # Find the part that does not belong to object and set mask to 0
-    isPart = np.logical_xor(obj['object'], prev)
-    matchPart = np.any(isPart, axis=-1)
+    imgArrBbox = imgArr[sy:ey, sx:ex, :]
 
 
-    mask = np.zeros(imgArr.shape[:2], dtype=np.uint8)
+
+    if obj not in pos:
+        pos[obj] = {}
+        edge[obj] = {}
+        prevDict['numObj'] += 1
+
+    objPos = pos[obj]
+    objEdge = edge[obj]
+
+
+    if clsname not in objPos:
+        objPos[clsname] = {'coords': [], 'color': color}
+        objEdge[clsname] = []
+
+    clsPos = objPos[clsname]
+    clsEdge = objEdge[clsname]
+
+
+
+
+    mask = np.zeros((h, w), dtype=np.uint8)
+
     if mode == "GrabCut":
         mask.fill(2)
-        mask[matchPart] = 0
-
-    # Sum all channel up
-    # temp = np.sum(prev, axis=-1)
-    # mask[temp != 0] = 0
+        maskout_others(mask, pos, obj)
 
 
     bgdModel = np.zeros((1, 65), dtype=np.float64)
     fgdModel = np.zeros((1, 65), dtype=np.float64)
 
     for point in points:
-        x = point['x']
-        y = point['y']
+        x = point['x'] - sx
+        y = point['y'] - sy
         mask[y, x] = 1
 
     originalMask = np.array(mask)
 
+    print("Start processing...")
+
+    start_t = time.time()
     if mode == "GrabCut":
-        mask, bgdModel,fgdModel = cv2.grabCut(imgArr, mask, None, bgdModel, fgdModel, K, cv2.GC_INIT_WITH_MASK)
+        mask, bgdModel,fgdModel = cv2.grabCut(imgArrBbox, mask, None, bgdModel, fgdModel, K, cv2.GC_INIT_WITH_MASK)
         outputMask = np.where((mask == 2)|(mask == 0), 0, 1).astype('uint8')
     elif mode == "Manual":
         outputMask = mask
     else:
         return json.dumps({'success':False, 'message': 'Invalid mode.'}), 400, {'ContentType':'application/json'}
 
+    end_t = time.time()
+    print("Grabcut done: {}".format(end_t-start_t))
     # rule out the segments that not connected with annotation
+
     outputMask = connectivity(originalMask, outputMask)
 
+    start_t = time.time()
+    construct_label(outputMask, prevDict, obj, clsname, sx, sy)
+    end_t = time.time()
 
-    visual, label, objLabel = construct_label(outputMask, prev, obj, colorImg, imgArr)
-    labelImg = server_pil_image(label)
-    visualImg = server_pil_image(visual)
-    objImg = server_pil_image(objLabel)
+    print("Construct label done: {}".format(end_t-start_t))
 
-
-    return jsonify({'overlap': visualImg, 'label':labelImg, 'objLabel': objImg})
+    return jsonify({'label': prevDict, 'tool':tool})
 
 
 @app.route("/highlight_obj", methods=['POST'])
-
 def highlight_obj():
     metaData = request.get_json()
     print(metaData)
     return 'Good!'
+
+@app.route("/xml_saver", methods=['POST'])
+def xml_saver():
+    metaData = request.get_json()
+    root = ET.Element("annotator")
+
+    create_xml(metaData, root)
+    tree = ET.ElementTree(root)
+
+    f = BytesIO()
+    tree.write(f, encoding='utf-8', xml_declaration=True)
+    xmlstr = f.getvalue()  # your XML file, encoded as UTF-8
+    #tree.write('test.xml')
+    response = make_response(xmlstr)
+    # This is the key: Set the right header for the response
+    # to be downloaded, instead of just printed on the browser
+    response.headers["Content-disposition"] = "attachment;"
+    response.mimetype="application/xml"
+
+    # tree.write('test.xml')
+
+    return response
 
 
 if __name__ == '__main__':

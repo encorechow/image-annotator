@@ -2394,23 +2394,27 @@ table.alt tbody tr td {
 /* tabs */
 #mainTabs {
   position: relative;
+  display: inline-block;
   height: 60px;
   padding: 5px;
-  width: 70%;
+  width: 90%;
   margin: 0 auto; }
+
+#mainbar {
+  width: 60%; }
 
 ul.tabs {
   list-style-type: none;
   margin: 0;
-  padding: 0; }
+  padding: 0;
+  display: inline-block;
+  width: 100%; }
   ul.tabs li {
     border: gray solid 1px;
     width: 47%;
-    float: left;
+    display: inline-block;
     margin: 0 .25em 0 0;
     padding: .25em .25em; }
-  ul.tabs .mainli {
-    width: 23%; }
   ul.tabs a {
     color: gray;
     font-weight: bold;
@@ -2518,9 +2522,19 @@ ul.tabs {
 
 .zoom {
   display: inline-block;
-  width: 22%;
-  float: left;
+  width: 15%;
+  font-size: 10px;
   margin: 0 10px; }
+
+/* file controler style */
+#addMore {
+  display: none; }
+
+#importXML {
+  display: none; }
+
+.file-controler-item {
+  margin: 10px; }
 
 /* Header */
 #header {
@@ -2935,7 +2949,6 @@ ul.tabs {
 
 /* Wrapper */
 #wrapper {
-  width: 64em;
   max-width: calc(100% - 4em);
   margin: 0 auto; }
   @media screen and (max-width: 480px) {

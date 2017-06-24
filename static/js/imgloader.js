@@ -127,23 +127,7 @@
         w = this.width;
         h = this.height;
 
-        // adjust the appearace of image on canvas
-        // if(w > maxWidth || h > maxHeight){
-        //   if(w > h){
-        //     ratio = w / maxWidth;
-        //     nw = maxWidth;
-        //     nh = h / ratio;
-        //   }else{
-        //     ratio = h / maxHeight;
-        //     nh = maxHeight;
-        //     nw = w / ratio;
-        //   }
-        // }else
-        // {
-        //
-        //   nh = h;
-        //   nw = w;
-        // }
+
         // TODO: Comment out
         // console.log(nh,nw);
         // nh = 700;
@@ -157,6 +141,7 @@
           width: w,
           height: h,
         }).css({
+          'display': 'block',
           'position': 'relative',
           'top': '10%',
           'margin': '0 auto',
@@ -178,12 +163,13 @@
             'overflow': 'auto',
         });
 
+
         overlay.css({
             'position': 'absolute',
             'top': '10%',
-            'margin': '0 auto',
             'width': w,
             'height': h,
+            'margin': '0 auto',
             'background-color':'rgba(0, 0, 0, 0.50)',
             'background': 'url(data:;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAABl0RVh0U29mdHdhcmUAUGFpbnQuTkVUIHYzLjUuNUmK/OAAAAATSURBVBhXY2RgYNgHxGAAYuwDAA78AjwwRoQYAAAAAElFTkSuQmCC) repeat scroll transparent\9', /* ie fallback png background image */
             'z-index':'9999',
@@ -194,7 +180,9 @@
         self.$annoCanvas.wrap(wrapperDiv);
         $('#wrapperDiv').append(overlay);
 
-        self.$ele.annotator(self.$annoCanvas, self.firstImg, self.ctx, self.fullData, overlay);
+
+        var fileArr = Array.prototype.slice.call(self.fullData);
+        self.$ele.annotator(self.$annoCanvas, self.firstImg, self.ctx, fileArr, overlay);
       });
 
 
